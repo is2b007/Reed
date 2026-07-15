@@ -45,6 +45,13 @@ const config: ForgeConfig = {
     appCategoryType: "public.app-category.developer-tools",
     name: "Reed",
     icon: path.join(configDirectory, "assets", "Reed.icns"),
+    osxSign: {
+      identity: "-",
+      identityValidation: false,
+      preAutoEntitlements: false,
+      preEmbedProvisioningProfile: false,
+      optionsForFile: () => ({ hardenedRuntime: false, timestamp: "none" }),
+    },
     afterPrune: includeNativeRuntime,
   },
   rebuildConfig: {},
