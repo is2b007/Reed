@@ -102,7 +102,7 @@ function registerIpc(): void {
 
 async function createWindow(): Promise<void> {
   window = new BrowserWindow({
-    width: 1500, height: 940, minWidth: 1080, minHeight: 680, backgroundColor: "#0e1210",
+    width: 1500, height: 940, minWidth: 600, minHeight: 560, backgroundColor: "#0e1210",
     title: "Reed", show: false,
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
