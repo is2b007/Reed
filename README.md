@@ -17,6 +17,12 @@ The application has no accounts, login, telemetry, updater, cloud storage, hoste
 
 Reed currently targets Node 22+ and pnpm 11. Dependency installation is the development/build step that may use a network. Once built, the app, data, backups, MCP, CLI, and exports run offline.
 
+### Download the Mac app
+
+Download the latest Apple-silicon DMG from the [Reed releases page](https://github.com/is2b007/Reed/releases/latest), open it, and drag **Reed** into Applications. This first release is an unsigned development build. If macOS says it cannot verify Reed, close the alert, then Control-click **Reed.app** in Applications, choose **Open**, and confirm **Open** once. After that, Reed opens normally.
+
+The GitHub repository is the source-code project. The DMG and ZIP on the releases page are the installable app; opening the repository page itself will not launch Reed.
+
 ```sh
 pnpm install
 CI=true pnpm typecheck
