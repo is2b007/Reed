@@ -1,5 +1,7 @@
 # Reed MCP server
 
+For installation and client configuration, start with [Set up Reed MCP](MCP_SETUP.md). For agent behavior, use [AI playbook for Reed MCP](AI_MCP_PLAYBOOK.md).
+
 The MCP server is a local stdio adapter over `@reed/core`. It opens exactly one project passed by `--project` or `REED_PROJECT`, does not listen on a port, never invokes an LLM, and returns JSON text envelopes with `{ok,data}` or structured `{ok:false,error:{code,message,details}}` values.
 
 Start the compiled server:

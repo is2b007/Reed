@@ -86,6 +86,8 @@ Unity JSON is one-way generated output and is stamped `GENERATED — DO NOT HAND
 - [Data model and graph contract](docs/DATA_MODEL.md)
 - [CLI reference](docs/CLI.md)
 - [MCP tool reference](docs/MCP.md)
+- [MCP setup for humans](docs/MCP_SETUP.md)
+- [MCP operating playbook for AI agents](docs/AI_MCP_PLAYBOOK.md)
 - [Pixel Crushers export and Unity import](docs/PIXEL_CRUSHERS.md)
 - [Offline contract and release acceptance](docs/OFFLINE_CONTRACT.md)
 - [Architecture and completion plan](docs/BUILD_PLAN.md)
