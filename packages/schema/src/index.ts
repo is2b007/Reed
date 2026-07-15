@@ -65,6 +65,7 @@ export const CreateSceneInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
   slug: z.string().trim().regex(/^[a-z0-9][a-z0-9-]{1,62}$/),
   levelId: IdSchema.nullable().optional(),
+  partitionId: IdSchema.optional(),
   beatRef: z.string().trim().max(300).default(""),
   sortOrder: z.number().int().nonnegative().default(0),
   expectedVersion: z.number().int().positive().optional(),
@@ -152,6 +153,82 @@ export const DeclareVariableInputSchema = z.object({
   source: MutationSourceSchema.default("human"),
 });
 
+export const CreatePartitionInputSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  scopeType: z.enum(["project", "level", "scene"]),
+  scopeId: IdSchema.nullable().default(null),
+  baseId: z.number().int().nonnegative(),
+  rangeSize: z.number().int().positive().default(100_000),
+  exportOrder: z.number().int().nonnegative().default(0),
+  expectedVersion: z.number().int().positive().optional(),
+  source: MutationSourceSchema.default("human"),
+});
+
+export const UpdateNodeInputSchema = z.object({
+  lineId: LineIdSchema,
+  speakerCharacterId: IdSchema.nullable().optional(),
+  listenerCharacterId: IdSchema.nullable().optional(),
+  spokenLanguage: LanguageCodeSchema.optional(),
+  sequence: z.string().max(20_000).optional(),
+  conditions: z.string().max(20_000).optional(),
+  userScript: z.string().max(20_000).optional(),
+  subtitleOverride: SubtitleOverrideSchema.optional(),
+  contextComment: z.string().max(8_000).optional(),
+  voiceComment: z.string().max(8_000).optional(),
+  contextPath: z.array(LineIdSchema).max(64).optional(),
+  tags: z.array(z.string().trim().min(1).max(80)).max(100).optional(),
+  isTerminal: z.boolean().optional(),
+  x: z.number().finite().optional(),
+  y: z.number().finite().optional(),
+  expectedVersion: z.number().int().positive().optional(),
+  source: MutationSourceSchema.default("human"),
+  force: z.boolean().default(false),
+});
+
+export const UnlinkNodesInputSchema = z.object({
+  linkId: IdSchema,
+  expectedVersion: z.number().int().positive().optional(),
+  source: MutationSourceSchema.default("human"),
+  force: z.boolean().default(false),
+});
+
+export const DeleteNodeInputSchema = z.object({
+  lineId: LineIdSchema,
+  confirmation: LineIdSchema,
+  expectedVersion: z.number().int().positive().optional(),
+  source: MutationSourceSchema.default("human"),
+  force: z.boolean().default(false),
+});
+
+export const ImportConversationNodeSchema = z.object({
+  key: z.string().trim().min(1).max(120),
+  kind: NodeKindSchema.exclude(["start"]).default("line"),
+  speakerCharacterId: IdSchema.nullable().optional(),
+  listenerCharacterId: IdSchema.nullable().optional(),
+  spokenLanguage: LanguageCodeSchema.optional(),
+  texts: z.record(LanguageCodeSchema, z.string().max(20_000)).default({}),
+  menuTexts: z.record(LanguageCodeSchema, z.string().max(2_000)).default({}),
+  sequence: z.string().max(20_000).default(""),
+  conditions: z.string().max(20_000).default(""),
+  userScript: z.string().max(20_000).default(""),
+  tags: z.array(z.string().trim().min(1).max(80)).default([]),
+  isTerminal: z.boolean().default(false),
+});
+
+export const ImportConversationInputSchema = z.object({
+  sceneId: IdSchema,
+  title: z.string().trim().min(1).max(200),
+  description: z.string().max(4_000).default(""),
+  nodes: z.array(ImportConversationNodeSchema).min(1),
+  links: z.array(z.object({
+    originKey: z.string().min(1),
+    destinationKey: z.string().min(1),
+    priority: z.number().int().nonnegative().default(0),
+  })).default([]),
+  expectedVersion: z.number().int().positive().optional(),
+  source: MutationSourceSchema.default("agent"),
+});
+
 export type CreateProjectInput = z.infer<typeof CreateProjectInputSchema>;
 export type CreateLevelInput = z.infer<typeof CreateLevelInputSchema>;
 export type CreateSceneInput = z.infer<typeof CreateSceneInputSchema>;
@@ -163,6 +240,11 @@ export type SetLineStatusInput = z.infer<typeof SetLineStatusInputSchema>;
 export type SetVoiceStatusInput = z.infer<typeof SetVoiceStatusInputSchema>;
 export type UpsertCharacterInput = z.infer<typeof UpsertCharacterInputSchema>;
 export type DeclareVariableInput = z.infer<typeof DeclareVariableInputSchema>;
+export type CreatePartitionInput = z.infer<typeof CreatePartitionInputSchema>;
+export type UpdateNodeInput = z.infer<typeof UpdateNodeInputSchema>;
+export type UnlinkNodesInput = z.infer<typeof UnlinkNodesInputSchema>;
+export type DeleteNodeInput = z.infer<typeof DeleteNodeInputSchema>;
+export type ImportConversationInput = z.infer<typeof ImportConversationInputSchema>;
 export type NodeKind = z.infer<typeof NodeKindSchema>;
 export type TextStatus = z.infer<typeof TextStatusSchema>;
 export type VoiceStatus = z.infer<typeof VoiceStatusSchema>;

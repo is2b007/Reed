@@ -14,6 +14,8 @@ export function createProjectSnapshot(reed: ReedProject): ProjectSnapshot {
     conversations: reed.listConversations().map((conversation) => reed.getConversation(conversation.id)),
     characters: reed.listCharacters(),
     variables: reed.listVariables(),
+    partitions: reed.listPartitions(),
+    reviewSnapshots: reed.listReviewSnapshots(),
   };
 }
 

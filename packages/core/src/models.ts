@@ -109,6 +109,7 @@ export interface ConversationGraph extends ConversationRecord {
 export interface CharacterRecord {
   id: string;
   projectId: string;
+  numericId: number;
   name: string;
   displayNames: Record<string, string>;
   isPlayer: boolean;
@@ -123,12 +124,35 @@ export interface CharacterRecord {
 export interface VariableRecord {
   id: string;
   projectId: string;
+  numericId: number;
   name: string;
   type: "boolean" | "number" | "text";
   initialValue: boolean | number | string;
   description: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DatabasePartitionRecord {
+  id: string;
+  projectId: string;
+  name: string;
+  scopeType: "project" | "level" | "scene";
+  scopeId: string | null;
+  baseId: number;
+  rangeSize: number;
+  exportOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReviewSnapshotRecord {
+  id: string;
+  projectId: string;
+  backupId: string;
+  label: string;
+  mutationSequence: number;
+  createdAt: string;
 }
 
 export interface BackupRecord {
@@ -160,6 +184,10 @@ export interface SearchResult {
   conversationTitle: string;
   sceneId: string;
   sceneName: string;
+  speakerCharacterId: string | null;
+  lineStatus: TextStatus;
+  voiceStatus: VoiceStatus;
+  tags: string[];
 }
 
 export interface ProjectSnapshot {
@@ -172,4 +200,6 @@ export interface ProjectSnapshot {
   conversations: ConversationGraph[];
   characters: CharacterRecord[];
   variables: VariableRecord[];
+  partitions: DatabasePartitionRecord[];
+  reviewSnapshots: ReviewSnapshotRecord[];
 }

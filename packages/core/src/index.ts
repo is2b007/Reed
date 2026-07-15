@@ -3,5 +3,7 @@ export * from "./errors.js";
 export * from "./export.js";
 export * from "./models.js";
 export * from "./paths.js";
+export * from "./pixel-crushers.js";
 export * from "./project.js";
+export * from "./production.js";
 export * from "./validation.js";

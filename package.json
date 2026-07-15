@@ -9,8 +9,10 @@
   },
   "scripts": {
     "build": "pnpm -r --if-present build",
+    "build:runtime": "pnpm --filter @reed/schema build && pnpm --filter @reed/core build && pnpm --filter @reed/cli build && pnpm --filter @reed/mcp build",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "vitest run",
+    "test:offline": "pnpm build:runtime && node scripts/offline-smoke.mjs",
     "test:watch": "vitest",
     "reed": "node --import tsx packages/cli/src/index.ts"
   },

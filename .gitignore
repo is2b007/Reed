@@ -3,6 +3,8 @@ node_modules/
 .pnpm-store/
 dist/
 build/
+out/
+.webpack/
 coverage/
 .turbo/
 

@@ -8,6 +8,8 @@ import {
   GuardrailError,
   ReedProject,
   exportProjectJson,
+  exportPixelCrushers,
+  exportVoicePackage,
   serializeProject,
   validateProject,
 } from "../src/index.js";
@@ -122,5 +124,63 @@ describe("ReedProject", () => {
       copy.close();
     }
     expect(target).toBe(path.join(root, "exports", "reed-project.json"));
+  });
+
+  it("exports Pixel Crushers IDs, localized fields, and Unicode voice handoff files", async () => {
+    const { project } = await createProject();
+    const character = (await project.upsertCharacter({
+      name: "Ελένη", displayNames: { en: "Eleni", el: "Ελένη" }, isPlayer: false,
+      portraitPath: null, description: "Οδηγός", actorNotes: "Quiet confidence", voiceNotes: "Natural room tone",
+    })).value;
+    await project.declareVariable({ name: "MetEleni", type: "boolean", initialValue: false });
+    const conversation = await createConversation(project);
+    const start = conversation.nodes[0];
+    if (!start) throw new Error("missing start");
+    const line = (await project.addNode({ conversationId: conversation.id, speakerCharacterId: character.id, text: "Welcome to the harbour.", isTerminal: true })).value;
+    await project.setNodeText({ lineId: line.lineId, language: "el", text: "Καλώς ήρθες στο λιμάνι." });
+    await project.updateNode({ lineId: line.lineId, contextComment: "First meeting", voiceComment: "Warm, guarded", tags: ["arrival"], force: false });
+    await project.linkNodes({ originNodeId: start.id, destinationNodeId: line.id, priority: 0, force: false });
+
+    const exported = await exportPixelCrushers(project);
+    const database = JSON.parse(await readFile(exported.outputs[0]?.filePath ?? "", "utf8")) as {
+      description: string; actors: Array<{ id: number }>; conversations: Array<{ id: number; dialogueEntries: Array<{ id: number; fields: Array<{ title: string; value: string }>; outgoingLinks: unknown[] }> }>;
+    };
+    expect(database.description).toContain("GENERATED — DO NOT HAND-EDIT");
+    expect(database.actors[0]?.id).toBe(character.numericId);
+    expect(database.conversations[0]?.id).toBe(conversation.numericId);
+    expect(database.conversations[0]?.dialogueEntries.find((entry) => entry.id === line.entryNumericId)?.fields)
+      .toContainEqual(expect.objectContaining({ title: "el", value: "Καλώς ήρθες στο λιμάνι." }));
+
+    const voice = await exportVoicePackage(project, { language: "el" });
+    expect((await readFile(voice.pdfPath)).subarray(0, 4).toString()).toBe("%PDF");
+    expect((await readFile(voice.xlsxPath)).subarray(0, 2).toString()).toBe("PK");
+    expect(await readFile(voice.csvPath, "utf8")).toContain("Καλώς ήρθες στο λιμάνι.");
+  });
+
+  it("imports auto-laid-out agent graphs and records review baselines", async () => {
+    const { project } = await createProject(["en"]);
+    const scene = (await project.createScene({ name: "Gate", slug: "gate" })).value;
+    const graph = await project.importConversation({
+      sceneId: scene.id, title: "At the gate", source: "agent",
+      nodes: [
+        { key: "ask", kind: "choice", texts: { en: "Ask to enter" }, menuTexts: {}, sequence: "", conditions: "", userScript: "", tags: [], isTerminal: false },
+        { key: "reply", kind: "line", texts: { en: "Not tonight." }, menuTexts: {}, sequence: "", conditions: "", userScript: "", tags: [], isTerminal: true },
+      ],
+      links: [{ originKey: "ask", destinationKey: "reply", priority: 0 }],
+    });
+    expect(graph.nodes.filter((node) => node.kind !== "start").every((node) => node.lineStatus === "draft")).toBe(true);
+    expect(graph.nodes.find((node) => node.kind === "line")?.x).toBeGreaterThan(0);
+    expect(project.getReviewDiff().length).toBeGreaterThan(0);
+    const review = await project.approveReview("Gate approved");
+    expect(review.mutationSequence).toBeGreaterThan(0);
+    expect(project.getReviewDiff()).toEqual([]);
+  });
+
+  it("rejects overlapping Pixel Crushers Base ID ranges", async () => {
+    const { project } = await createProject();
+    await expect(project.createPartition({ name: "Collision", scopeType: "project", scopeId: null, baseId: 50, rangeSize: 100, exportOrder: 1 }))
+      .rejects.toMatchObject({ code: "CONFLICT" });
+    const partition = await project.createPartition({ name: "Chapter two", scopeType: "project", scopeId: null, baseId: 1_000_000, rangeSize: 100_000, exportOrder: 1 });
+    expect(partition.value.baseId).toBe(1_000_000);
   });
 });

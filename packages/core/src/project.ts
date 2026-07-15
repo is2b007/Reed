@@ -1,4 +1,4 @@
-import { mkdir, readdir, unlink } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rename, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -7,21 +7,29 @@ import {
   AddNodeInputSchema,
   CreateConversationInputSchema,
   CreateLevelInputSchema,
+  CreatePartitionInputSchema,
   CreateProjectInputSchema,
   CreateSceneInputSchema,
   DeclareVariableInputSchema,
+  DeleteNodeInputSchema,
+  ImportConversationInputSchema,
   LinkNodesInputSchema,
   SCHEMA_VERSION,
   SetLineStatusInputSchema,
   SetVoiceStatusInputSchema,
   SetNodeTextInputSchema,
+  UnlinkNodesInputSchema,
+  UpdateNodeInputSchema,
   UpsertCharacterInputSchema,
   type AddNodeInput,
   type CreateConversationInput,
   type CreateLevelInput,
+  type CreatePartitionInput,
   type CreateProjectInput,
   type CreateSceneInput,
   type DeclareVariableInput,
+  type DeleteNodeInput,
+  type ImportConversationInput,
   type LinkNodesInput,
   type MutationRecord,
   type MutationSource,
@@ -29,6 +37,8 @@ import {
   type SetVoiceStatusInput,
   type SetNodeTextInput,
   type UpsertCharacterInput,
+  type UnlinkNodesInput,
+  type UpdateNodeInput,
 } from "@reed/schema";
 import { ConflictError, ConcurrencyError, GuardrailError, NotFoundError } from "./errors.js";
 import { runMigrations } from "./migrations.js";
@@ -37,12 +47,14 @@ import type {
   CharacterRecord,
   ConversationGraph,
   ConversationRecord,
+  DatabasePartitionRecord,
   DialogueLinkRecord,
   DialogueNodeRecord,
   LevelRecord,
   MutationResult,
   NodeTextRecord,
   ProjectRecord,
+  ReviewSnapshotRecord,
   SceneRecord,
   SearchResult,
   VariableRecord,
@@ -224,7 +236,7 @@ export class ReedProject {
 
   listCharacters(): CharacterRecord[] {
     return (this.db.prepare("SELECT * FROM characters ORDER BY name, id").all() as Row[]).map((row) => ({
-      id: String(row.id), projectId: String(row.project_id), name: String(row.name),
+      id: String(row.id), projectId: String(row.project_id), numericId: Number(row.numeric_id), name: String(row.name),
       displayNames: parseJson<Record<string, string>>(row.display_names_json), isPlayer: boolean(row.is_player),
       portraitPath: row.portrait_path === null ? null : String(row.portrait_path), description: String(row.description),
       actorNotes: String(row.actor_notes), voiceNotes: String(row.voice_notes),
@@ -234,7 +246,7 @@ export class ReedProject {
 
   listVariables(): VariableRecord[] {
     return (this.db.prepare("SELECT * FROM variables ORDER BY name, id").all() as Row[]).map((row) => ({
-      id: String(row.id), projectId: String(row.project_id), name: String(row.name),
+      id: String(row.id), projectId: String(row.project_id), numericId: Number(row.numeric_id), name: String(row.name),
       type: String(row.type) as VariableRecord["type"], initialValue: parseJson<boolean | number | string>(row.initial_value_json),
       description: String(row.description), createdAt: String(row.created_at), updatedAt: String(row.updated_at),
     }));
@@ -242,6 +254,27 @@ export class ReedProject {
 
   listConversations(): ConversationRecord[] {
     return (this.db.prepare("SELECT * FROM conversations ORDER BY numeric_id, title, id").all() as Row[]).map(mapConversation);
+  }
+
+  listPartitions(): DatabasePartitionRecord[] {
+    return (this.db.prepare("SELECT * FROM database_partitions ORDER BY export_order, base_id, id").all() as Row[]).map((row) => ({
+      id: String(row.id), projectId: String(row.project_id), name: String(row.name),
+      scopeType: String(row.scope_type) as DatabasePartitionRecord["scopeType"], scopeId: row.scope_id ? String(row.scope_id) : null,
+      baseId: Number(row.base_id), rangeSize: Number(row.range_size), exportOrder: Number(row.export_order),
+      createdAt: String(row.created_at), updatedAt: String(row.updated_at),
+    }));
+  }
+
+  listReviewSnapshots(): ReviewSnapshotRecord[] {
+    return (this.db.prepare("SELECT * FROM review_snapshots ORDER BY mutation_sequence DESC, created_at DESC").all() as Row[]).map((row) => ({
+      id: String(row.id), projectId: String(row.project_id), backupId: String(row.backup_id), label: String(row.label),
+      mutationSequence: Number(row.mutation_sequence), createdAt: String(row.created_at),
+    }));
+  }
+
+  getReviewDiff(): MutationRecord[] {
+    const latest = this.db.prepare("SELECT mutation_sequence FROM review_snapshots ORDER BY mutation_sequence DESC LIMIT 1").get() as Row | undefined;
+    return this.getChanges(Number(latest?.mutation_sequence ?? 0));
   }
 
   getConversation(id: string): ConversationGraph {
@@ -270,7 +303,8 @@ export class ReedProject {
 
   find(query: string, limit = 50): SearchResult[] {
     const rows = this.db.prepare(`SELECT ls.line_id, ls.language_code, ls.dialogue_text, ls.menu_text,
-      c.id AS conversation_id, c.title AS conversation_title, s.id AS scene_id, s.name AS scene_name
+      c.id AS conversation_id, c.title AS conversation_title, s.id AS scene_id, s.name AS scene_name,
+      dn.speaker_character_id, dn.line_status, dn.voice_status, dn.tags_json
       FROM line_search ls
       JOIN dialogue_nodes dn ON dn.line_id = ls.line_id
       JOIN conversations c ON c.id = dn.conversation_id
@@ -280,6 +314,39 @@ export class ReedProject {
       lineId: String(row.line_id), language: String(row.language_code), text: String(row.dialogue_text),
       menuText: row.menu_text === null ? null : String(row.menu_text), conversationId: String(row.conversation_id),
       conversationTitle: String(row.conversation_title), sceneId: String(row.scene_id), sceneName: String(row.scene_name),
+      speakerCharacterId: row.speaker_character_id ? String(row.speaker_character_id) : null,
+      lineStatus: String(row.line_status) as SearchResult["lineStatus"], voiceStatus: String(row.voice_status) as SearchResult["voiceStatus"],
+      tags: parseJson<string[]>(row.tags_json),
+    }));
+  }
+
+  findLines(filters: { query?: string; characterId?: string; tag?: string; status?: string; language?: string; missingLanguage?: string; limit?: number }): SearchResult[] {
+    const clauses: string[] = [];
+    const values: unknown[] = [];
+    if (filters.query) { clauses.push("line_search MATCH ?"); values.push(filters.query); }
+    if (filters.characterId) { clauses.push("dn.speaker_character_id = ?"); values.push(filters.characterId); }
+    if (filters.tag) { clauses.push("EXISTS (SELECT 1 FROM json_each(dn.tags_json) WHERE value = ?)"); values.push(filters.tag); }
+    if (filters.status) { clauses.push("(dn.line_status = ? OR dn.voice_status = ?)"); values.push(filters.status, filters.status); }
+    if (filters.language) { clauses.push("ls.language_code = ?"); values.push(filters.language); }
+    if (filters.missingLanguage) {
+      clauses.push("NOT EXISTS (SELECT 1 FROM node_texts missing WHERE missing.node_id = dn.id AND missing.language_code = ? AND TRIM(missing.dialogue_text) != '')");
+      values.push(filters.missingLanguage);
+    }
+    values.push(filters.limit ?? 100);
+    const rows = this.db.prepare(`SELECT ls.line_id, ls.language_code, ls.dialogue_text, ls.menu_text,
+      c.id AS conversation_id, c.title AS conversation_title, s.id AS scene_id, s.name AS scene_name,
+      dn.speaker_character_id, dn.line_status, dn.voice_status, dn.tags_json
+      FROM line_search ls JOIN dialogue_nodes dn ON dn.line_id = ls.line_id
+      JOIN conversations c ON c.id = dn.conversation_id JOIN scenes s ON s.id = c.scene_id
+      ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
+      ORDER BY ls.line_id, ls.language_code LIMIT ?`).all(...values) as Row[];
+    return rows.map((row) => ({
+      lineId: String(row.line_id), language: String(row.language_code), text: String(row.dialogue_text),
+      menuText: row.menu_text === null ? null : String(row.menu_text), conversationId: String(row.conversation_id),
+      conversationTitle: String(row.conversation_title), sceneId: String(row.scene_id), sceneName: String(row.scene_name),
+      speakerCharacterId: row.speaker_character_id ? String(row.speaker_character_id) : null,
+      lineStatus: String(row.line_status) as SearchResult["lineStatus"], voiceStatus: String(row.voice_status) as SearchResult["voiceStatus"],
+      tags: parseJson<string[]>(row.tags_json),
     }));
   }
 
@@ -298,6 +365,32 @@ export class ReedProject {
     return { value: mapLevel(this.db.prepare("SELECT * FROM levels WHERE id = ?").get(id) as Row), ...result };
   }
 
+  async createPartition(rawInput: CreatePartitionInput): Promise<MutationResult<DatabasePartitionRecord>> {
+    const input = CreatePartitionInputSchema.parse(rawInput);
+    await this.ensureRollingBackup();
+    const project = this.getProject();
+    this.assertVersion("project", project.id, input.expectedVersion, project.version);
+    if (input.scopeType !== "project" && !input.scopeId) throw new ConflictError("Level and scene partitions require a scope ID");
+    const end = input.baseId + input.rangeSize - 1;
+    const overlap = this.db.prepare(`SELECT id, name, base_id, range_size FROM database_partitions
+      WHERE project_id = ? AND NOT ((base_id + range_size - 1) < ? OR base_id > ?) LIMIT 1`)
+      .get(project.id, input.baseId, end) as Row | undefined;
+    if (overlap) throw new ConflictError("Database ID range overlaps an existing partition", { existing: overlap.name, baseId: overlap.base_id, rangeSize: overlap.range_size });
+    const id = randomUUID();
+    const timestamp = now();
+    const result = this.db.transaction(() => {
+      this.db.prepare(`INSERT INTO database_partitions
+        (id, project_id, name, scope_type, scope_id, base_id, range_size, export_order, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        id, project.id, input.name, input.scopeType, input.scopeId, input.baseId, input.rangeSize, input.exportOrder, timestamp, timestamp,
+      );
+      return this.commitProjectMutation(project, "partition.create", input.source, { id, ...input });
+    }).immediate();
+    const value = this.listPartitions().find((partition) => partition.id === id);
+    if (!value) throw new NotFoundError("Database partition", id);
+    return { value, ...result };
+  }
+
   async createScene(rawInput: CreateSceneInput): Promise<MutationResult<SceneRecord>> {
     const input = CreateSceneInputSchema.parse(rawInput);
     await this.ensureRollingBackup();
@@ -306,7 +399,10 @@ export class ReedProject {
     if (input.levelId && !this.db.prepare("SELECT 1 FROM levels WHERE id = ? AND project_id = ?").get(input.levelId, project.id)) {
       throw new NotFoundError("Level", input.levelId);
     }
-    const partition = this.db.prepare("SELECT id FROM database_partitions WHERE project_id = ? ORDER BY export_order, base_id LIMIT 1").get(project.id) as Row;
+    const partition = input.partitionId
+      ? this.db.prepare("SELECT id FROM database_partitions WHERE id = ? AND project_id = ?").get(input.partitionId, project.id) as Row | undefined
+      : this.db.prepare("SELECT id FROM database_partitions WHERE project_id = ? ORDER BY export_order, base_id LIMIT 1").get(project.id) as Row | undefined;
+    if (!partition) throw new NotFoundError("Database partition", input.partitionId ?? "default");
     const prefix = slugPrefix(input.slug);
     const id = randomUUID();
     const timestamp = now();
@@ -413,6 +509,144 @@ export class ReedProject {
     return { value: mapLink(this.db.prepare("SELECT * FROM dialogue_links WHERE id = ?").get(id) as Row), ...result };
   }
 
+  async unlinkNodes(rawInput: UnlinkNodesInput): Promise<MutationResult<{ deletedLinkId: string }>> {
+    const input = UnlinkNodesInputSchema.parse(rawInput);
+    await this.ensureRollingBackup();
+    const link = this.db.prepare("SELECT * FROM dialogue_links WHERE id = ?").get(input.linkId) as Row | undefined;
+    if (!link) throw new NotFoundError("Dialogue link", input.linkId);
+    const origin = this.requireNode(String(link.origin_node_id));
+    const destination = this.requireNode(String(link.destination_node_id));
+    const conversation = this.requireConversation(String(link.origin_conversation_id));
+    this.assertVersion("conversation", conversation.id, input.expectedVersion, conversation.version);
+    const touchesFinal = (origin.kind !== "start" && origin.line_status === "final")
+      || (destination.kind !== "start" && destination.line_status === "final");
+    if (touchesFinal && !input.force) throw new GuardrailError("Unlinking final content requires force", { linkId: input.linkId });
+    if (touchesFinal && input.source === "agent") throw new GuardrailError("Agents cannot unlink final content");
+    const result = this.db.transaction(() => {
+      this.db.prepare("DELETE FROM dialogue_links WHERE id = ?").run(input.linkId);
+      return this.commitConversationMutation(conversation, "link.delete", input.source, { linkId: input.linkId, originNodeId: link.origin_node_id, destinationNodeId: link.destination_node_id });
+    }).immediate();
+    return { value: { deletedLinkId: input.linkId }, ...result };
+  }
+
+  async updateNode(rawInput: UpdateNodeInput): Promise<MutationResult<DialogueNodeRecord>> {
+    const input = UpdateNodeInputSchema.parse(rawInput);
+    await this.ensureRollingBackup();
+    const node = this.requireNodeByLineId(input.lineId);
+    const conversation = this.requireConversation(String(node.conversation_id));
+    this.assertVersion("conversation", conversation.id, input.expectedVersion, conversation.version);
+    if (node.line_status === "final" && !input.force) throw new GuardrailError("Editing final node metadata requires force", { lineId: input.lineId });
+    if (node.line_status === "final" && input.source === "agent") throw new GuardrailError("Agents cannot edit final node metadata", { lineId: input.lineId });
+    this.assertCharacter(input.speakerCharacterId);
+    this.assertCharacter(input.listenerCharacterId);
+    if (input.spokenLanguage && !this.getProject().languages.includes(input.spokenLanguage)) {
+      throw new ConflictError("Language is not enabled for this project", { language: input.spokenLanguage });
+    }
+    const columns: Record<string, unknown> = {
+      speaker_character_id: input.speakerCharacterId,
+      listener_character_id: input.listenerCharacterId,
+      spoken_language: input.spokenLanguage,
+      sequence: input.sequence,
+      conditions: input.conditions,
+      user_script: input.userScript,
+      subtitle_override: input.subtitleOverride,
+      context_comment: input.contextComment,
+      voice_comment: input.voiceComment,
+      context_path_json: input.contextPath ? JSON.stringify(input.contextPath) : undefined,
+      tags_json: input.tags ? JSON.stringify([...new Set(input.tags)].sort()) : undefined,
+      is_terminal: input.isTerminal === undefined ? undefined : input.isTerminal ? 1 : 0,
+      x: input.x,
+      y: input.y,
+    };
+    const updates = Object.entries(columns).filter((entry) => entry[1] !== undefined);
+    if (updates.length === 0) return { value: this.getNodeByLineId(input.lineId), version: conversation.version, changeSequence: this.getChanges().at(-1)?.sequence ?? 0 };
+    const timestamp = now();
+    const result = this.db.transaction(() => {
+      const assignments = updates.map(([column]) => `${column} = ?`).join(", ");
+      this.db.prepare(`UPDATE dialogue_nodes SET ${assignments}, updated_at = ? WHERE id = ?`)
+        .run(...updates.map((entry) => entry[1]), timestamp, node.id);
+      return this.commitConversationMutation(conversation, "node.update", input.source, { lineId: input.lineId, fields: Object.fromEntries(updates) });
+    }).immediate();
+    return { value: this.getNodeByLineId(input.lineId), ...result };
+  }
+
+  async deleteNode(rawInput: DeleteNodeInput): Promise<MutationResult<{ deletedLineId: string }>> {
+    const input = DeleteNodeInputSchema.parse(rawInput);
+    if (input.confirmation !== input.lineId) throw new GuardrailError("Delete confirmation must exactly match the Line ID", { lineId: input.lineId });
+    await this.ensureRollingBackup();
+    const node = this.requireNodeByLineId(input.lineId);
+    if (node.kind === "start") throw new GuardrailError("The conversation start node cannot be deleted");
+    const conversation = this.requireConversation(String(node.conversation_id));
+    this.assertVersion("conversation", conversation.id, input.expectedVersion, conversation.version);
+    if (node.line_status === "final" && !input.force) throw new GuardrailError("Deleting a final line requires force", { lineId: input.lineId });
+    if (node.line_status === "final" && input.source === "agent") throw new GuardrailError("Agents cannot delete final lines");
+    const result = this.db.transaction(() => {
+      this.db.prepare("DELETE FROM line_search WHERE line_id = ?").run(input.lineId);
+      this.db.prepare("DELETE FROM dialogue_nodes WHERE id = ?").run(node.id);
+      return this.commitConversationMutation(conversation, "node.delete", input.source, { lineId: input.lineId, entryNumericId: node.entry_numeric_id });
+    }).immediate();
+    return { value: { deletedLineId: input.lineId }, ...result };
+  }
+
+  async importConversation(rawInput: ImportConversationInput): Promise<ConversationGraph> {
+    const input = ImportConversationInputSchema.parse(rawInput);
+    const keys = new Set<string>();
+    for (const node of input.nodes) {
+      if (keys.has(node.key)) throw new ConflictError("Import node keys must be unique", { key: node.key });
+      keys.add(node.key);
+    }
+    for (const link of input.links) {
+      if (!keys.has(link.originKey) || !keys.has(link.destinationKey)) throw new ConflictError("Every imported link must reference an imported node", { link });
+    }
+    const created = await this.createConversation({ sceneId: input.sceneId, title: input.title, description: input.description, expectedVersion: input.expectedVersion, source: input.source });
+    const graphNodes = new Map<string, DialogueNodeRecord>();
+    const indegree = new Map(input.nodes.map((node) => [node.key, 0]));
+    for (const link of input.links) indegree.set(link.destinationKey, (indegree.get(link.destinationKey) ?? 0) + 1);
+    const depths = new Map<string, number>();
+    const queue = input.nodes.filter((node) => (indegree.get(node.key) ?? 0) === 0).map((node) => node.key);
+    for (const key of queue) depths.set(key, 0);
+    while (queue.length > 0) {
+      const origin = queue.shift();
+      if (!origin) continue;
+      for (const link of input.links.filter((candidate) => candidate.originKey === origin)) {
+        depths.set(link.destinationKey, Math.max(depths.get(link.destinationKey) ?? 0, (depths.get(origin) ?? 0) + 1));
+        indegree.set(link.destinationKey, (indegree.get(link.destinationKey) ?? 1) - 1);
+        if (indegree.get(link.destinationKey) === 0) queue.push(link.destinationKey);
+      }
+    }
+    const rowsByDepth = new Map<number, number>();
+    for (const definition of input.nodes) {
+      const depth = depths.get(definition.key) ?? 0;
+      const row = rowsByDepth.get(depth) ?? 0;
+      rowsByDepth.set(depth, row + 1);
+      const firstText = Object.entries(definition.texts)[0];
+      const added = await this.addNode({
+        conversationId: created.value.id, kind: definition.kind, speakerCharacterId: definition.speakerCharacterId,
+        listenerCharacterId: definition.listenerCharacterId, spokenLanguage: definition.spokenLanguage ?? firstText?.[0],
+        text: firstText?.[1], menuText: firstText ? definition.menuTexts[firstText[0]] : undefined,
+        isTerminal: definition.isTerminal, x: depth * 320, y: row * 180, source: input.source,
+      });
+      graphNodes.set(definition.key, added.value);
+      await this.updateNode({
+        lineId: added.value.lineId, sequence: definition.sequence, conditions: definition.conditions,
+        userScript: definition.userScript, tags: definition.tags, source: input.source, force: false,
+      });
+      for (const [language, value] of Object.entries(definition.texts)) {
+        if (language === firstText?.[0]) continue;
+        await this.setNodeText({ lineId: added.value.lineId, language, text: value, menuText: definition.menuTexts[language], source: input.source, force: false });
+      }
+    }
+    const start = created.value.nodes.find((node) => node.kind === "start");
+    const roots = input.nodes.filter((node) => !input.links.some((link) => link.destinationKey === node.key));
+    if (start && roots[0]) await this.linkNodes({ originNodeId: start.id, destinationNodeId: graphNodes.get(roots[0].key)?.id ?? "", priority: 0, source: input.source, force: false });
+    for (const definition of input.links) {
+      const origin = graphNodes.get(definition.originKey);
+      const destination = graphNodes.get(definition.destinationKey);
+      if (origin && destination) await this.linkNodes({ originNodeId: origin.id, destinationNodeId: destination.id, priority: definition.priority, source: input.source, force: false });
+    }
+    return this.getConversation(created.value.id);
+  }
+
   async setNodeText(rawInput: SetNodeTextInput): Promise<MutationResult<DialogueNodeRecord>> {
     const input = SetNodeTextInputSchema.parse(rawInput);
     await this.ensureRollingBackup();
@@ -460,10 +694,14 @@ export class ReedProject {
       throw new GuardrailError("Agents cannot set a line above polished", { requestedStatus: input.status });
     }
     if (input.status === "final" && !input.force) throw new GuardrailError("Setting final status requires force", { lineId: input.lineId });
+    const voiceNeedsRework = node.line_status === "final"
+      && ["draft", "placeholder", "rework"].includes(input.status)
+      && ["recorded", "processed", "final"].includes(String(node.voice_status));
     const timestamp = now();
     const result = this.db.transaction(() => {
-      this.db.prepare("UPDATE dialogue_nodes SET line_status = ?, updated_at = ? WHERE id = ?").run(input.status, timestamp, node.id);
-      return this.commitConversationMutation(conversation, "line.status", input.source, { lineId: input.lineId, before: node.line_status, after: input.status });
+      this.db.prepare("UPDATE dialogue_nodes SET line_status = ?, voice_status = CASE WHEN ? THEN 'rework' ELSE voice_status END, updated_at = ? WHERE id = ?")
+        .run(input.status, voiceNeedsRework ? 1 : 0, timestamp, node.id);
+      return this.commitConversationMutation(conversation, "line.status", input.source, { lineId: input.lineId, before: node.line_status, after: input.status, voiceNeedsRework });
     }).immediate();
     return { value: this.getNodeByLineId(input.lineId), ...result };
   }
@@ -491,15 +729,16 @@ export class ReedProject {
     this.assertVersion("project", project.id, input.expectedVersion, project.version);
     const id = input.id ?? randomUUID();
     const existing = this.db.prepare("SELECT * FROM characters WHERE id = ?").get(id) as Row | undefined;
+    const nextNumeric = existing?.numeric_id ?? (this.db.prepare("SELECT COALESCE(MAX(numeric_id), 0) + 1 AS value FROM characters WHERE project_id = ?").get(project.id) as Row).value;
     const timestamp = now();
     const result = this.db.transaction(() => {
       this.db.prepare(`INSERT INTO characters
-        (id, project_id, name, display_names_json, is_player, portrait_path, description, actor_notes, voice_notes, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, project_id, numeric_id, name, display_names_json, is_player, portrait_path, description, actor_notes, voice_notes, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET name = excluded.name, display_names_json = excluded.display_names_json,
           is_player = excluded.is_player, portrait_path = excluded.portrait_path, description = excluded.description,
           actor_notes = excluded.actor_notes, voice_notes = excluded.voice_notes, updated_at = excluded.updated_at`).run(
-        id, project.id, input.name, JSON.stringify(input.displayNames), input.isPlayer ? 1 : 0, input.portraitPath,
+        id, project.id, nextNumeric, input.name, JSON.stringify(input.displayNames), input.isPlayer ? 1 : 0, input.portraitPath,
         input.description, input.actorNotes, input.voiceNotes, existing?.created_at ?? timestamp, timestamp,
       );
       return this.commitProjectMutation(project, existing ? "character.update" : "character.create", input.source, { id, name: input.name });
@@ -520,14 +759,17 @@ export class ReedProject {
     if (!correctType) throw new ConflictError("Variable initial value does not match its declared type", { name: input.name, type: input.type });
     const existing = this.db.prepare("SELECT id, created_at FROM variables WHERE project_id = ? AND name = ?").get(project.id, input.name) as Row | undefined;
     const id = existing ? String(existing.id) : randomUUID();
+    const numericId = existing
+      ? Number((this.db.prepare("SELECT numeric_id FROM variables WHERE id = ?").get(id) as Row).numeric_id)
+      : Number((this.db.prepare("SELECT COALESCE(MAX(numeric_id), 0) + 1 AS value FROM variables WHERE project_id = ?").get(project.id) as Row).value);
     const timestamp = now();
     const result = this.db.transaction(() => {
       this.db.prepare(`INSERT INTO variables
-        (id, project_id, name, type, initial_value_json, description, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (id, project_id, numeric_id, name, type, initial_value_json, description, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(project_id, name) DO UPDATE SET type = excluded.type, initial_value_json = excluded.initial_value_json,
           description = excluded.description, updated_at = excluded.updated_at`).run(
-        id, project.id, input.name, input.type, JSON.stringify(input.initialValue), input.description, existing?.created_at ?? timestamp, timestamp,
+        id, project.id, numericId, input.name, input.type, JSON.stringify(input.initialValue), input.description, existing?.created_at ?? timestamp, timestamp,
       );
       return this.commitProjectMutation(project, existing ? "variable.update" : "variable.create", input.source, { id, name: input.name, type: input.type });
     }).immediate();
@@ -556,6 +798,45 @@ export class ReedProject {
       id: String(row.id), projectId: String(row.project_id), kind: String(row.kind) as BackupRecord["kind"],
       label: row.label === null ? null : String(row.label), filePath: String(row.file_path), createdAt: String(row.created_at),
     }));
+  }
+
+  async approveReview(label: string): Promise<ReviewSnapshotRecord> {
+    const cleanLabel = label.trim();
+    if (!cleanLabel) throw new ConflictError("Review snapshot label is required");
+    const backup = await this.createBackup("named", cleanLabel);
+    const project = this.getProject();
+    const last = this.db.prepare("SELECT COALESCE(MAX(sequence), 0) AS value FROM mutation_log WHERE project_id = ?").get(project.id) as Row;
+    const record: ReviewSnapshotRecord = {
+      id: randomUUID(), projectId: project.id, backupId: backup.id, label: cleanLabel,
+      mutationSequence: Number(last.value), createdAt: now(),
+    };
+    this.db.prepare(`INSERT INTO review_snapshots
+      (id, project_id, backup_id, label, mutation_sequence, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(record.id, record.projectId, record.backupId, record.label, record.mutationSequence, record.createdAt);
+    return record;
+  }
+
+  async restoreBackup(backupId: string, confirmation: string): Promise<{ restoredBackupId: string; database: string }> {
+    if (confirmation !== backupId) throw new GuardrailError("Restore confirmation must exactly match the backup ID", { backupId });
+    const row = this.db.prepare("SELECT file_path FROM backup_records WHERE id = ?").get(backupId) as Row | undefined;
+    if (!row) throw new NotFoundError("Backup", backupId);
+    const source = String(row.file_path);
+    const temporary = `${this.paths.database}.restore`;
+    await copyFile(source, temporary);
+    const check = new Database(temporary, { readonly: true });
+    try {
+      if (check.pragma("integrity_check", { simple: true }) !== "ok") throw new ConflictError("Selected backup failed SQLite integrity checking", { backupId });
+    } finally {
+      check.close();
+    }
+    this.checkpoint();
+    this.close();
+    await Promise.all([
+      unlink(`${this.paths.database}-wal`).catch(() => undefined),
+      unlink(`${this.paths.database}-shm`).catch(() => undefined),
+    ]);
+    await rename(temporary, this.paths.database);
+    return { restoredBackupId: backupId, database: this.paths.database };
   }
 
   checkpoint(): void {
@@ -611,7 +892,7 @@ export class ReedProject {
     return row;
   }
 
-  private getNodeByLineId(lineId: string): DialogueNodeRecord {
+  getNodeByLineId(lineId: string): DialogueNodeRecord {
     const row = this.requireNodeByLineId(lineId);
     const texts = (this.db.prepare("SELECT * FROM node_texts WHERE node_id = ? ORDER BY language_code").all(row.id) as Row[]).map(mapNodeText);
     return mapNode(row, texts);

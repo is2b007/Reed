@@ -204,6 +204,47 @@ const migrations: Migration[] = [
       CREATE INDEX idx_backups_project ON backup_records(project_id, created_at);
     `,
   },
+  {
+    version: 2,
+    name: "production_ids_and_reviews",
+    sql: `
+      ALTER TABLE characters ADD COLUMN numeric_id INTEGER;
+      ALTER TABLE variables ADD COLUMN numeric_id INTEGER;
+
+      UPDATE characters SET numeric_id = (
+        SELECT COUNT(*) FROM characters earlier
+        WHERE earlier.project_id = characters.project_id
+          AND (earlier.created_at < characters.created_at OR (earlier.created_at = characters.created_at AND earlier.id <= characters.id))
+      );
+      UPDATE variables SET numeric_id = (
+        SELECT COUNT(*) FROM variables earlier
+        WHERE earlier.project_id = variables.project_id
+          AND (earlier.created_at < variables.created_at OR (earlier.created_at = variables.created_at AND earlier.id <= variables.id))
+      );
+
+      CREATE UNIQUE INDEX idx_characters_numeric ON characters(project_id, numeric_id);
+      CREATE UNIQUE INDEX idx_variables_numeric ON variables(project_id, numeric_id);
+
+      CREATE TABLE review_snapshots (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        backup_id TEXT NOT NULL REFERENCES backup_records(id) ON DELETE RESTRICT,
+        label TEXT NOT NULL,
+        mutation_sequence INTEGER NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE project_settings (
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        key TEXT NOT NULL,
+        value_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(project_id, key)
+      );
+
+      CREATE INDEX idx_reviews_project ON review_snapshots(project_id, mutation_sequence, created_at);
+    `,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

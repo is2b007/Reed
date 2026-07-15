@@ -65,3 +65,11 @@ Before a release:
 10. Verify there are no remote asset URLs in built HTML, CSS, JavaScript, or packaged configuration.
 
 An automated integration test should deny network APIs at the process level and exercise the same vertical slice. Static checks are useful but cannot replace the process-level test.
+
+Run Reed's automated acceptance with:
+
+```sh
+CI=true pnpm test:offline
+```
+
+The test injects a process-level guard that throws on HTTP, HTTPS, sockets, TLS, DNS, datagrams, fetch, and WebSocket; then creates a Unicode branching project, runs the built CLI and stdio MCP server, creates a backup, and produces project, Pixel Crushers, screenplay, PDF, CSV, and XLSX outputs. It also scans Reed-owned runtime source for network clients, telemetry/updaters, and remote asset references, and verifies the Electron request boundary covers HTTP(S) and WebSocket traffic. The packaged app separately cancels those protocols in Electron and ships its assets locally.

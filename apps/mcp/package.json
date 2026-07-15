@@ -1,0 +1,20 @@
+{
+  "name": "@reed/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "reed-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "start": "node --import tsx src/index.ts",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.5",
+    "@reed/core": "workspace:*",
+    "@reed/schema": "workspace:*",
+    "zod": "^3.25.0"
+  }
+}

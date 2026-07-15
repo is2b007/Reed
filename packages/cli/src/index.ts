@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 import process from "node:process";
 import path from "node:path";
+import { readFile } from "node:fs/promises";
 import { Argument, Command, Option } from "commander";
 import {
   ReedError,
   ReedProject,
   exportProjectJson,
+  exportPixelCrushers,
+  exportScreenplay,
+  exportVoicePackage,
+  getVoiceBudget,
   getSchemaDescriptor,
   validateProject,
   type MutationSource,
@@ -83,11 +88,28 @@ program.command("add-scene")
   .argument("<name>")
   .requiredOption("--slug <slug>")
   .option("--level-id <id>")
+  .option("--partition-id <id>")
   .option("--beat-ref <reference>", "beat-sheet reference", "")
   .option("--sort-order <number>", "display order", integer, 0)
   .option("--expected-version <number>", "project version", integer)
-  .action(async (name: string, options: { slug: string; levelId?: string; beatRef: string; sortOrder: number; expectedVersion?: number }, command: Command) => {
+  .action(async (name: string, options: { slug: string; levelId?: string; partitionId?: string; beatRef: string; sortOrder: number; expectedVersion?: number }, command: Command) => {
     print(await useProject(command, (project) => project.createScene({ name, ...options, source: globals(command).source })), command);
+  });
+
+program.command("add-partition")
+  .description("reserve a stable Pixel Crushers Base ID range")
+  .argument("<name>")
+  .addOption(new Option("--scope <scope>").choices(["project", "level", "scene"]).default("project"))
+  .option("--scope-id <id>")
+  .requiredOption("--base-id <number>", "first ID in the reserved range", integer)
+  .option("--range-size <number>", "number of IDs reserved", integer, 100000)
+  .option("--export-order <number>", "database export order", integer, 0)
+  .option("--expected-version <number>", "project version", integer)
+  .action(async (name: string, options: { scope: "project" | "level" | "scene"; scopeId?: string; baseId: number; rangeSize: number; exportOrder: number; expectedVersion?: number }, command: Command) => {
+    print(await useProject(command, (project) => project.createPartition({
+      name, scopeType: options.scope, scopeId: options.scopeId ?? null, baseId: options.baseId,
+      rangeSize: options.rangeSize, exportOrder: options.exportOrder, expectedVersion: options.expectedVersion, source: globals(command).source,
+    })), command);
   });
 
 program.command("add-conversation")
@@ -131,6 +153,66 @@ program.command("link")
   .option("--force", "confirm a change involving final content", false)
   .action(async (originNodeId: string, destinationNodeId: string, options: { priority: number; expectedVersion?: number; force: boolean }, command: Command) => {
     print(await useProject(command, (project) => project.linkNodes({ originNodeId, destinationNodeId, ...options, source: globals(command).source })), command);
+  });
+
+program.command("unlink")
+  .description("remove a graph link")
+  .argument("<link-id>")
+  .option("--expected-version <number>", "origin conversation version", integer)
+  .option("--force", "confirm a change involving final content", false)
+  .action(async (linkId: string, options: { expectedVersion?: number; force: boolean }, command: Command) => {
+    print(await useProject(command, (project) => project.unlinkNodes({ linkId, ...options, source: globals(command).source })), command);
+  });
+
+program.command("update-node")
+  .description("update dialogue logic, context, layout, or tags")
+  .argument("<line-id>")
+  .option("--speaker-id <id>")
+  .option("--listener-id <id>")
+  .option("--language <code>")
+  .option("--sequence <text>")
+  .option("--conditions <lua>")
+  .option("--script <lua>")
+  .option("--context <text>")
+  .option("--voice-comment <text>")
+  .option("--tags <tags>", "comma-separated tags")
+  .option("--terminal <value>", "true or false")
+  .option("--x <number>", "canvas x", Number)
+  .option("--y <number>", "canvas y", Number)
+  .option("--expected-version <number>", "conversation version", integer)
+  .option("--force", "confirm editing final metadata", false)
+  .action(async (lineId: string, options: Record<string, unknown>, command: Command) => {
+    print(await useProject(command, (project) => project.updateNode({
+      lineId, speakerCharacterId: options.speakerId as string | undefined, listenerCharacterId: options.listenerId as string | undefined,
+      spokenLanguage: options.language as string | undefined, sequence: options.sequence as string | undefined,
+      conditions: options.conditions as string | undefined, userScript: options.script as string | undefined,
+      contextComment: options.context as string | undefined, voiceComment: options.voiceComment as string | undefined,
+      tags: typeof options.tags === "string" ? options.tags.split(",").map((tag) => tag.trim()).filter(Boolean) : undefined,
+      isTerminal: typeof options.terminal === "string" ? options.terminal === "true" : undefined,
+      x: options.x as number | undefined, y: options.y as number | undefined,
+      expectedVersion: options.expectedVersion as number | undefined, force: Boolean(options.force), source: globals(command).source,
+    })), command);
+  });
+
+program.command("delete-node")
+  .description("delete a node after exact Line ID confirmation")
+  .argument("<line-id>")
+  .requiredOption("--confirm <line-id>")
+  .option("--expected-version <number>", "conversation version", integer)
+  .option("--force", "confirm deleting final content", false)
+  .action(async (lineId: string, options: { confirm: string; expectedVersion?: number; force: boolean }, command: Command) => {
+    print(await useProject(command, (project) => project.deleteNode({ lineId, confirmation: options.confirm, expectedVersion: options.expectedVersion, force: options.force, source: globals(command).source })), command);
+  });
+
+program.command("import-conversation")
+  .description("import and auto-layout a complete conversation graph from JSON")
+  .argument("[file]", "JSON file; omit or use - for stdin", "-")
+  .action(async (file: string, _options: unknown, command: Command) => {
+    const raw = file === "-" ? await new Promise<string>((resolve) => {
+      let value = "";
+      process.stdin.setEncoding("utf8"); process.stdin.on("data", (chunk) => { value += String(chunk); }); process.stdin.on("end", () => resolve(value));
+    }) : await readFile(path.resolve(file), "utf8");
+    print(await useProject(command, (project) => project.importConversation({ ...JSON.parse(raw) as object, source: globals(command).source } as Parameters<ReedProject["importConversation"]>[0])), command);
   });
 
 program.command("set-text")
@@ -205,6 +287,14 @@ program.command("list-scenes").description("list scenes").action(async (_options
   print(await useProject(command, (project) => project.listScenes()), command);
 });
 
+program.command("list-characters").description("list characters").action(async (_options: unknown, command: Command) => {
+  print(await useProject(command, (project) => project.listCharacters()), command);
+});
+
+program.command("list-partitions").description("list stable database ID ranges").action(async (_options: unknown, command: Command) => {
+  print(await useProject(command, (project) => project.listPartitions()), command);
+});
+
 program.command("list-conversations").description("list conversations").action(async (_options: unknown, command: Command) => {
   print(await useProject(command, (project) => project.listConversations()), command);
 });
@@ -228,8 +318,48 @@ program.command("validate").description("validate graph, localization, variable,
 program.command("backup").description("create a named local SQLite snapshot").argument("[label]", "snapshot label", "manual")
   .action(async (label: string, _options: unknown, command: Command) => print(await useProject(command, (project) => project.createBackup("named", label)), command));
 
+program.command("restore")
+  .description("restore a local snapshot after exact backup ID confirmation")
+  .argument("<backup-id>")
+  .requiredOption("--confirm <backup-id>")
+  .action(async (backupId: string, options: { confirm: string }, command: Command) => print(await useProject(command, (project) => project.restoreBackup(backupId, options.confirm)), command));
+
+program.command("review-diff").description("show changes since the last human-approved snapshot")
+  .action(async (_options: unknown, command: Command) => print(await useProject(command, (project) => project.getReviewDiff()), command));
+
+program.command("approve-review").description("approve pending changes and create a named snapshot").argument("<label>")
+  .action(async (label: string, _options: unknown, command: Command) => print(await useProject(command, (project) => project.approveReview(label)), command));
+
 program.command("export-project").description("write deterministic Reed project JSON").option("-o, --output <path>")
   .action(async (options: { output?: string }, command: Command) => print(await useProject(command, (project) => exportProjectJson(project, options.output)), command));
+
+program.command("export-pixelcrushers")
+  .description("export Pixel Crushers DialogueDatabase JSON and audio manifest")
+  .addOption(new Option("--mode <mode>").choices(["single", "partitioned"]).default("single"))
+  .option("-o, --output <directory>")
+  .option("--allow-invalid", "export despite validation errors", false)
+  .action(async (options: { mode: "single" | "partitioned"; output?: string; allowInvalid: boolean }, command: Command) => {
+    print(await useProject(command, (project) => exportPixelCrushers(project, { mode: options.mode, outputDirectory: options.output, allowInvalid: options.allowInvalid })), command);
+  });
+
+program.command("export-voice")
+  .description("export actor PDF and editable CSV/XLSX studio package")
+  .option("--language <code>")
+  .option("--character <ids>", "comma-separated character IDs")
+  .option("--status <statuses>", "comma-separated voice statuses")
+  .option("-o, --output <directory>")
+  .action(async (options: { language?: string; character?: string; status?: string; output?: string }, command: Command) => {
+    print(await useProject(command, (project) => exportVoicePackage(project, {
+      language: options.language, characterIds: options.character?.split(","), voiceStatuses: options.status?.split(","), outputDirectory: options.output,
+    })), command);
+  });
+
+program.command("voice-budget").description("show per-character line, word, and studio-minute estimates").option("--language <code>")
+  .action(async (options: { language?: string }, command: Command) => print(await useProject(command, (project) => getVoiceBudget(project, options.language)), command));
+
+program.command("export-screenplay").description("export a golden-path Markdown read script")
+  .option("--language <code>").option("--reference-language <code>")
+  .action(async (options: { language?: string; referenceLanguage?: string }, command: Command) => print(await useProject(command, (project) => exportScreenplay(project, options.language, options.referenceLanguage)), command));
 
 program.command("schema").description("print the machine-readable command vocabulary")
   .action((_options: unknown, command: Command) => print(getSchemaDescriptor(), command));
@@ -238,7 +368,8 @@ program.showSuggestionAfterError();
 program.showHelpAfterError();
 
 try {
-  await program.parseAsync(process.argv);
+  const argv = process.argv[2] === "dialogue" ? [...process.argv.slice(0, 2), ...process.argv.slice(3)] : process.argv;
+  await program.parseAsync(argv);
 } catch (error) {
   const json = process.argv.includes("--json");
   const payload = error instanceof ReedError
