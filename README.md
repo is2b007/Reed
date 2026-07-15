@@ -18,12 +18,30 @@ See [docs/OFFLINE_CONTRACT.md](docs/OFFLINE_CONTRACT.md) for the testable policy
 
 ## Current status
 
-This repository currently contains the product and design foundation. Application code has not been scaffolded yet.
+The first executable slice is working. The pnpm/TypeScript workspace contains the shared schema, SQLite core, and local CLI. The core currently supports project hierarchy, conversations and graph links, multilingual text, permanent Line IDs, persistent numeric IDs, mutation history, optimistic concurrency, production guardrails, search, validation, rolling/named backups, and deterministic Reed JSON export.
 
 - [docs/PRODUCT_BRIEF.md](docs/PRODUCT_BRIEF.md): condensed build specification and delivery order
+- [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md): locked architecture and phased delivery plan
 - [docs/VISUAL_REFERENCES.md](docs/VISUAL_REFERENCES.md): visual research and screen-by-screen takeaways
 - [DESIGN.md](DESIGN.md): initial product design system
 - [AGENTS.md](AGENTS.md): implementation rules for future contributors and coding agents
+
+Install and verify the local workspace:
+
+```sh
+pnpm install
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
+Start a project and inspect the command surface:
+
+```sh
+pnpm reed init ./my-story --name "My Story" --slug my-story
+pnpm reed --project ./my-story add-scene "Opening" --slug opening
+pnpm reed --help
+```
 
 ## Direction of truth
 
@@ -35,8 +53,8 @@ SQLite is the canonical source of truth. Reed exports deterministic plain-text p
 apps/
   editor/          React + TypeScript desktop editor
   mcp/             local MCP entrypoint
-  cli/             local CLI entrypoint
 packages/
+  cli/             local CLI entrypoint
   core/            data access, rules, validation, backups, exports
   schema/          shared graph and tool schemas
   ui/              Reed UI primitives and tokens
@@ -45,4 +63,4 @@ fixtures/
 docs/
 ```
 
-The first implementation milestone is a CLI-proven vertical slice: create a project and conversation, add and link dialogue nodes, persist stable IDs in SQLite WAL mode, validate, back up, and export a Pixel Crushers-compatible JSON fixture.
+The next milestone is the fixture-gated Pixel Crushers exporter. Compatibility will only be claimed after a Unity-authored sample passes import, export, localized-field, split-database, Base ID, and cross-database-link tests.

@@ -1,5 +1,6 @@
 # dependencies and build output
 node_modules/
+.pnpm-store/
 dist/
 build/
 coverage/

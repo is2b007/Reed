@@ -1,0 +1,19 @@
+{
+  "name": "@reed/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "reed": "./dist/index.js"
+  },
+  "scripts": {
+    "start": "node --import tsx src/index.ts",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@reed/core": "workspace:*",
+    "@reed/schema": "workspace:*",
+    "commander": "^14.0.0"
+  }
+}

@@ -2,9 +2,16 @@
 
 ## Research note
 
-The Mobbin connector was invoked on 2026-07-15 for node-canvas workspaces, project navigator/inspector layouts, localization tables, and review diffs. Both deep and standard searches timed out without returning screen records, so there are no defensible Mobbin screen URLs to cite yet. The exact Mobbin briefs are preserved below for a later retry.
+The Mobbin connector was retried on 2026-07-15. The screens below were selected only after visual inspection; they complement the public product references and are interaction references rather than templates to copy wholesale.
 
-To keep the design setup moving, the reference set uses current public product documentation and screenshots from the products themselves. These are references for interaction patterns, not templates to copy wholesale.
+## Inspected Mobbin references
+
+- [LangChain graph studio](https://mobbin.com/screens/d35078ab-34a5-434d-906d-f9550e6e5087): compact graph chrome, visible node connections, and a focused run/debug surface. Reed should use its spatial clarity while carrying much denser narrative-production metadata.
+- [Airtable builder shell](https://mobbin.com/screens/25501ed5-5fa3-470d-9e8b-c04895f30740): strong left navigator, central work area, and contextual builder controls. This is the clearest shell reference for Reed's Scene → Conversation navigation.
+- [Descript translation review](https://mobbin.com/screens/22310789-f2fc-4cd0-b54f-b07507971044): source and translated content remain visibly paired, with progress and review actions nearby. Reed should adapt this to dual-language line editing and native-verification state.
+- [Ditto localization inspector](https://mobbin.com/screens/39ea279b-cea1-4daa-a673-eeed240412e7): a dense, practical string list with a detail inspector and status context. This supports Reed's translation table and selected-Line inspector.
+- [Figma compare changes](https://mobbin.com/screens/ebb90bf9-735a-4f5f-968a-8152ff58dde8): bounded change comparison and explicit review decisions. Reed should apply this to text, metadata, and graph-edge changes.
+- [GitHub files changed](https://mobbin.com/screens/72783a50-4cc2-4e3d-83f9-048f9a2455cf): navigable changed-item hierarchy and review progress. Reed's equivalent groups by Scene → Conversation → Line.
 
 ## 1. Arcweave: branching semantics and cross-board flow
 
@@ -111,7 +118,7 @@ Change for Reed:
 | Validation | Phrase QA | Every issue is a jump target; no decorative dashboard cards |
 | Overall shell | Affinity | Stable navigator/canvas/inspector with task workspaces |
 
-## Mobbin retry briefs
+## Future Mobbin search briefs
 
 Run these as separate Web screen searches, with 4–6 results each:
 
@@ -121,4 +128,4 @@ Run these as separate Web screen searches, with 4–6 results each:
 4. `review inbox showing content changes, side-by-side diff, approval actions, and version history`
 5. `text-only branching playtest with dialogue choices, variable controls, and path history`
 
-Only add a Mobbin result to this document after inspecting the returned image. Do not infer a screen from its title or metadata alone.
+Only add further Mobbin results after inspecting the returned image. Do not infer a screen from its title or metadata alone.
