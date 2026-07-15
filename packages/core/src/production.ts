@@ -1,6 +1,7 @@
-import { createRequire } from "node:module";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import fontkit from "@pdf-lib/fontkit";
 import ExcelJS from "exceljs";
 import { PDFDocument, rgb, type PDFFont, type PDFPage } from "pdf-lib";
@@ -127,10 +128,29 @@ function wrapText(value: string, font: PDFFont, size: number, width: number): st
   return lines;
 }
 
+function resolveFontFile(filename: string): string {
+  const relative = path.join("@fontsource", "noto-sans", "files", filename);
+  const resourcesPath = (process as typeof process & { resourcesPath?: string }).resourcesPath;
+  const starts = [process.cwd(), path.dirname(fileURLToPath(import.meta.url))];
+  if (resourcesPath) starts.unshift(path.join(resourcesPath, "app.asar"));
+  const visited = new Set<string>();
+  for (const start of starts) {
+    let directory = path.resolve(start);
+    while (!visited.has(directory)) {
+      visited.add(directory);
+      const candidate = path.join(directory, "node_modules", relative);
+      if (existsSync(candidate)) return candidate;
+      const parent = path.dirname(directory);
+      if (parent === directory) break;
+      directory = parent;
+    }
+  }
+  throw new Error(`Could not resolve voice-export font: ${filename}`);
+}
+
 async function createVoicePdf(rows: VoiceLineRow[], characters: CharacterRecord[], target: string): Promise<void> {
-  const require = createRequire(import.meta.url);
-  const latinPath = require.resolve("@fontsource/noto-sans/files/noto-sans-latin-ext-400-normal.woff");
-  const greekPath = require.resolve("@fontsource/noto-sans/files/noto-sans-greek-400-normal.woff");
+  const latinPath = resolveFontFile("noto-sans-latin-ext-400-normal.woff");
+  const greekPath = resolveFontFile("noto-sans-greek-400-normal.woff");
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   const latin = await pdf.embedFont(await readFile(latinPath), { subset: true });

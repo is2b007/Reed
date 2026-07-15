@@ -18,8 +18,10 @@ const includeNativeRuntime: NonNullable<ForgeConfig["packagerConfig"]>["afterPru
     const destination = path.join(buildPath, "node_modules");
     void (async () => {
       await mkdir(destination, { recursive: true });
-      for (const packageName of ["better-sqlite3", "bindings", "file-uri-to-path"]) {
-        await cp(path.join(hoistedModules, packageName), path.join(destination, packageName), { recursive: true });
+      for (const packageName of ["better-sqlite3", "bindings", "file-uri-to-path", "@fontsource/noto-sans"]) {
+        const packageDestination = path.join(destination, packageName);
+        await mkdir(path.dirname(packageDestination), { recursive: true });
+        await cp(path.join(hoistedModules, packageName), packageDestination, { recursive: true });
       }
       const packagePath = path.join(buildPath, "package.json");
       const stagedPackage = JSON.parse(await readFile(packagePath, "utf8")) as Record<string, unknown>;
