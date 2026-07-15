@@ -8,6 +8,7 @@ import type {
   SearchResult, ValidationIssue, ValidationReport,
 } from "@reed/core";
 import type { EditorBootstrap, MutationName } from "./contract.js";
+import reedLogo from "../assets/reed-logo.png";
 
 type Workspace = "graph" | "beats" | "playtest" | "translation" | "characters" | "validation" | "review" | "production" | "read";
 interface CardData extends Record<string, unknown> { record: DialogueNodeRecord; speaker: string; primary: string; secondary: string; onPath: boolean; }
@@ -55,7 +56,7 @@ function Welcome({ onReady }: { onReady(value: EditorBootstrap): void }) {
     } catch (value) { setError(message(value)); }
   };
   return <main className="welcome">
-    <div className="welcome-mark"><span>R</span><i /></div>
+    <div className="welcome-mark"><img src={reedLogo} alt="Reed" /></div>
     <div className="welcome-copy"><p className="eyebrow">Offline dialogue production</p><h1>Keep every branch<br />under control.</h1>
       <p>Write, localize, review, validate, voice, and hand dialogue to Unity without an account or network connection.</p>
       <div className="welcome-actions"><button className="primary" onClick={open}>Open project</button><button onClick={() => setCreating(!creating)}>New project</button></div>
@@ -87,12 +88,12 @@ function SceneTree({ sceneId, snapshot, selected, onConversation, onScene }: { s
   </div>;
 }
 
-function Inspector({ graph, node, primary, secondary, characters, onMutated }: { graph: ConversationGraph; node: DialogueNodeRecord | null; primary: string; secondary: string; characters: CharacterRecord[]; onMutated(): Promise<void> }) {
+function Inspector({ graph, node, primary, secondary, languages, characters, onMutated }: { graph: ConversationGraph; node: DialogueNodeRecord | null; primary: string; secondary: string; languages: string[]; characters: CharacterRecord[]; onMutated(): Promise<void> }) {
   if (!node) return <aside className="inspector"><div className="panel-title">Inspector</div><div className="panel-empty">Select a line to edit its text, production state, and logic.</div></aside>;
-  return <InspectorForm key={`${node.id}-${node.updatedAt}`} graph={graph} node={node} primary={primary} secondary={secondary} characters={characters} onMutated={onMutated} />;
+  return <InspectorForm key={`${node.id}-${node.updatedAt}`} graph={graph} node={node} primary={primary} secondary={secondary} languages={languages} characters={characters} onMutated={onMutated} />;
 }
 
-function InspectorForm({ graph, node, primary, secondary, characters, onMutated }: { graph: ConversationGraph; node: DialogueNodeRecord; primary: string; secondary: string; characters: CharacterRecord[]; onMutated(): Promise<void> }) {
+function InspectorForm({ graph, node, primary, secondary, languages, characters, onMutated }: { graph: ConversationGraph; node: DialogueNodeRecord; primary: string; secondary: string; languages: string[]; characters: CharacterRecord[]; onMutated(): Promise<void> }) {
   const [primaryText, setPrimaryText] = useState(node.texts.find((value) => value.language === primary)?.text ?? "");
   const [secondaryText, setSecondaryText] = useState(node.texts.find((value) => value.language === secondary)?.text ?? "");
   const [conditions, setConditions] = useState(node.conditions); const [sequence, setSequence] = useState(node.sequence);
@@ -108,7 +109,8 @@ function InspectorForm({ graph, node, primary, secondary, characters, onMutated 
     <div className="panel-title"><span>Line inspector</span><span className={`dot status-${node.lineStatus}`} /></div>
     <section><div className="inspector-id">{node.lineId}<button onClick={() => navigator.clipboard.writeText(node.lineId)}>Copy</button></div>
       <div className="field-grid"><label>Speaker<select value={node.speakerCharacterId ?? ""} onChange={(event) => void mutate("updateNode", { lineId: node.lineId, speakerCharacterId: event.target.value || null, force: forceRework() })}><option value="">Unassigned</option>{characters.map((character) => <option key={character.id} value={character.id}>{character.name}</option>)}</select></label>
-      <label>Text status<select value={node.lineStatus} onChange={(event) => void mutate("setLineStatus", { lineId: node.lineId, status: event.target.value, force: event.target.value === "final" ? window.confirm("Mark this line Final?") : false })}>{["placeholder", "draft", "polished", "edited", "final", "rework"].map((status) => <option key={status}>{status}</option>)}</select></label></div>
+      <label>Text status<select value={node.lineStatus} onChange={(event) => void mutate("setLineStatus", { lineId: node.lineId, status: event.target.value, force: event.target.value === "final" ? window.confirm("Mark this line Final?") : false })}>{["placeholder", "draft", "polished", "edited", "final", "rework"].map((status) => <option key={status}>{status}</option>)}</select></label>
+      <label>Spoken language<select value={node.spokenLanguage} onChange={(event) => void mutate("updateNode", { lineId: node.lineId, spokenLanguage: event.target.value, force: forceRework() })}>{languages.map((language) => <option key={language} value={language}>{language.toUpperCase()}</option>)}</select></label></div>
     </section>
     {node.kind !== "start" && node.kind !== "group" && <section><label className="language-label"><span>{primary.toUpperCase()} · primary</span><textarea rows={5} value={primaryText} onChange={(event) => setPrimaryText(event.target.value)} onBlur={() => void mutate("setNodeText", { lineId: node.lineId, language: primary, text: primaryText, force: forceRework() })} /></label>
       <label className="language-label secondary"><span>{secondary.toUpperCase()} · reference</span><textarea rows={4} value={secondaryText} onChange={(event) => setSecondaryText(event.target.value)} onBlur={() => void mutate("setNodeText", { lineId: node.lineId, language: secondary, text: secondaryText, force: forceRework() })} /></label></section>}
@@ -223,10 +225,10 @@ export function App() {
   const jumpIssue = (issue: ValidationIssue) => { if (issue.conversationId) setConversationId(issue.conversationId); setWorkspace("graph"); window.setTimeout(() => { const node = graph?.nodes.find((candidate) => candidate.lineId === issue.lineId); if (node) setSelectedNodeId(node.id); }, 100); };
   const doSearch = async () => { setResults(search.trim() ? await window.reed.findLines({ query: search }) : []); };
   return <div className="app-shell">
-    <header className="command-bar"><div className="brand"><span>R</span><b>Reed</b><i /> <em>{snapshot.project.name}</em></div><div className="workspace-tabs">{workspaces.map((item) => <button key={item.id} className={workspace === item.id ? "active" : ""} onClick={() => setWorkspace(item.id)}>{item.label}<kbd>⌘{item.key}</kbd></button>)}</div><div className="command-actions"><div className="search"><span>⌕</span><input value={search} placeholder="Text, Line ID, tag…" onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void doSearch(); }} />{results.length > 0 && <div className="search-results">{results.map((result) => <button key={`${result.lineId}-${result.language}`} onClick={() => { setConversationId(result.conversationId); setWorkspace("graph"); setResults([]); }}>{result.text}<small>{result.lineId} · {result.language}</small></button>)}</div>}</div><button onClick={() => void window.reed.mutate("createBackup", { label: "Manual" }).then(() => setNotice("Named backup saved"))}>Save version</button><button className="export-button" onClick={() => setWorkspace("production")}>Export</button></div></header>
+    <header className="command-bar"><div className="brand"><img src={reedLogo} alt="" /><b>Reed</b><i /> <em>{snapshot.project.name}</em></div><div className="workspace-tabs">{workspaces.map((item) => <button key={item.id} className={workspace === item.id ? "active" : ""} onClick={() => setWorkspace(item.id)}>{item.label}<kbd>⌘{item.key}</kbd></button>)}</div><div className="command-actions"><div className="search"><span>⌕</span><input value={search} placeholder="Text, Line ID, tag…" onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void doSearch(); }} />{results.length > 0 && <div className="search-results">{results.map((result) => <button key={`${result.lineId}-${result.language}`} onClick={() => { setConversationId(result.conversationId); setWorkspace("graph"); setResults([]); }}>{result.text}<small>{result.lineId} · {result.language}</small></button>)}</div>}</div><button onClick={() => void window.reed.mutate("createBackup", { label: "Manual" }).then(() => setNotice("Named backup saved"))}>Save version</button><button className="export-button" onClick={() => setWorkspace("production")}>Export</button></div></header>
     <Navigator snapshot={snapshot} selectedConversationId={conversationId} onConversation={chooseConversation} onScene={() => setWorkspace("beats")} />
     <main className="workspace">{workspace === "graph" && <GraphWorkspace graph={graph} snapshot={snapshot} selectedNodeId={selectedNodeId} onSelect={setSelectedNodeId} onMutated={refresh} primary={primary} secondary={secondary} />}{workspace === "beats" && <BeatMap snapshot={snapshot} onConversation={chooseConversation} refresh={refresh} />}{workspace === "playtest" && <Playtest graph={graph} snapshot={snapshot} language={primary} />}{workspace === "translation" && <Translation graph={graph} snapshot={snapshot} primary={primary} secondary={secondary} onSelect={(id) => { setSelectedNodeId(id); }} />}{workspace === "characters" && <Characters snapshot={snapshot} refresh={refresh} />}{workspace === "validation" && <Validation report={state.validation} onJump={jumpIssue} />}{workspace === "review" && <Review refresh={refresh} />}{workspace === "production" && <Production snapshot={snapshot} />}{workspace === "read" && <ReadView snapshot={snapshot} />}</main>
-    {(workspace === "graph" || workspace === "translation") && graph && <Inspector graph={graph} node={selectedNode} primary={primary} secondary={secondary} characters={snapshot.characters} onMutated={refresh} />}
+    {(workspace === "graph" || workspace === "translation") && graph && <Inspector graph={graph} node={selectedNode} primary={primary} secondary={secondary} languages={snapshot.project.languages} characters={snapshot.characters} onMutated={refresh} />}
     <footer className="status-bar"><span><i className={state.validation.valid ? "ok" : "bad"} />{state.validation.valid ? "Validation clear" : `${state.validation.errors} errors`}</span><span>{notice}</span><span>{state.root}</span><div className="language-switch"><select value={primary} onChange={(event) => setPrimary(event.target.value)}>{snapshot.project.languages.map((language) => <option key={language}>{language}</option>)}</select><button onClick={() => { setPrimary(secondary); setSecondary(primary); }}>⇄</button><select value={secondary} onChange={(event) => setSecondary(event.target.value)}>{snapshot.project.languages.map((language) => <option key={language}>{language}</option>)}</select></div></footer>
   </div>;
 }

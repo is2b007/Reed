@@ -6,7 +6,7 @@ The application has no accounts, login, telemetry, updater, cloud storage, hoste
 
 ## What is included
 
-- Dense React Flow graph editing with line, choice, group, and cross-conversation links; dual-language cards and inspector; permanent Line IDs; protected Final content; and text-only playtest.
+- Dense React Flow graph editing with line, choice, group, and cross-conversation links; any two configured languages side by side; per-line spoken-language selection; permanent Line IDs; protected Final content; and text-only playtest.
 - Project navigator, beat map, cast and variable registries, global local search, translation coverage, validation dashboard, review snapshots, read view, voice budget, and hot reload of CLI/MCP mutations.
 - SQLite WAL storage, migrations, optimistic concurrency, append-only mutation history, rolling and named backups, exact-confirmation restore/delete operations, and deterministic project JSON.
 - Pixel Crushers single- or multi-database JSON with stable actor, variable, conversation, and entry IDs; persisted Base ID ranges; localized fields; cross-database links; canvas positions; Lua/Sequence fields; and Line-ID audio manifest.

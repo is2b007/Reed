@@ -10,7 +10,8 @@ import { WebpackPlugin } from "@electron-forge/plugin-webpack";
 import { mainConfig } from "./webpack.main.config.js";
 import { rendererConfig } from "./webpack.renderer.config.js";
 
-const hoistedModules = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../node_modules");
+const configDirectory = path.dirname(fileURLToPath(import.meta.url));
+const hoistedModules = path.resolve(configDirectory, "../../node_modules");
 
 const includeNativeRuntime: NonNullable<ForgeConfig["packagerConfig"]>["afterPrune"] = [
   (buildPath, _electronVersion, _platform, _arch, callback) => {
@@ -41,6 +42,7 @@ const config: ForgeConfig = {
     appBundleId: "com.reed.dialogue-editor",
     appCategoryType: "public.app-category.developer-tools",
     name: "Reed",
+    icon: path.join(configDirectory, "assets", "Reed.icns"),
     afterPrune: includeNativeRuntime,
   },
   rebuildConfig: {},
