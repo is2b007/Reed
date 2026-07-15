@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background, BackgroundVariant, Controls, Handle, MiniMap, Position, ReactFlow,
   type Connection, type Edge, type Node, type NodeProps,
@@ -15,11 +15,17 @@ interface CardData extends Record<string, unknown> { record: DialogueNodeRecord;
 type CardNode = Node<CardData, "dialogue">;
 
 const workspaces: Array<{ id: Workspace; label: string; key: string }> = [
-  { id: "graph", label: "Graph", key: "1" }, { id: "beats", label: "Beat map", key: "2" },
+  { id: "graph", label: "Graph", key: "1" }, { id: "beats", label: "Beats", key: "2" },
   { id: "playtest", label: "Playtest", key: "3" }, { id: "translation", label: "Translation", key: "4" },
   { id: "characters", label: "Characters", key: "5" }, { id: "validation", label: "Validation", key: "6" },
   { id: "review", label: "Review", key: "7" }, { id: "production", label: "Production", key: "8" },
   { id: "read", label: "Read", key: "9" },
+];
+const primaryWorkspaces = workspaces.slice(0, 4);
+const secondaryWorkspaceGroups = [
+  { label: "Project", items: workspaces.slice(4, 5) },
+  { label: "Quality", items: workspaces.slice(5, 7) },
+  { label: "Output", items: workspaces.slice(7) },
 ];
 
 const DialogueCard = memo(({ data, selected }: NodeProps<CardNode>) => {
@@ -214,15 +220,23 @@ export function App() {
   const [conversationId, setConversationId] = useState<string | null>(null); const [graph, setGraph] = useState<ConversationGraph | null>(null); const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [primary, setPrimary] = useState("en"); const [secondary, setSecondary] = useState("el"); const [search, setSearch] = useState(""); const [results, setResults] = useState<SearchResult[]>([]); const [notice, setNotice] = useState("All changes saved locally");
   const [navigatorOpen, setNavigatorOpen] = useState(false); const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false); const workspaceMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => { void window.reed.getBootstrap().then((value) => { if (value) { setState(value); setPrimary(value.snapshot.project.defaultLanguage); setSecondary(value.snapshot.project.languages.find((language) => language !== value.snapshot.project.defaultLanguage) ?? value.snapshot.project.defaultLanguage); setConversationId(value.snapshot.conversations[0]?.id ?? null); } }); }, []);
   const loadConversation = useCallback(async (id: string | null) => { if (!id) { setGraph(null); return; } const value = await window.reed.getConversation(id); setGraph(value); setSelectedNodeId((current) => value.nodes.some((node) => node.id === current) ? current : value.nodes.find((node) => node.kind !== "start")?.id ?? value.nodes[0]?.id ?? null); }, []);
   useEffect(() => { void loadConversation(conversationId); }, [conversationId, loadConversation]);
   const refresh = useCallback(async () => { const next = await window.reed.getBootstrap(); if (next) { setState(next); if (conversationId) await loadConversation(conversationId); } }, [conversationId, loadConversation]);
   useEffect(() => { if (!state) return; const timer = window.setInterval(async () => { const changes = await window.reed.getChanges(state.lastChangeSequence); if (changes.length) { setNotice(`${changes.length} external change${changes.length === 1 ? "" : "s"} loaded`); await refresh(); } }, 1400); return () => window.clearInterval(timer); }, [state?.lastChangeSequence, refresh]);
-  useEffect(() => { const listener = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && /^[1-9]$/.test(event.key)) { const match = workspaces.find((value) => value.key === event.key); if (match) { event.preventDefault(); setWorkspace(match.id); setNavigatorOpen(false); setInspectorOpen(false); } } }; window.addEventListener("keydown", listener); return () => window.removeEventListener("keydown", listener); }, []);
+  useEffect(() => { const listener = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && /^[1-9]$/.test(event.key)) { const match = workspaces.find((value) => value.key === event.key); if (match) { event.preventDefault(); setWorkspace(match.id); setNavigatorOpen(false); setInspectorOpen(false); setWorkspaceMenuOpen(false); } } }; window.addEventListener("keydown", listener); return () => window.removeEventListener("keydown", listener); }, []);
+  useEffect(() => {
+    if (!workspaceMenuOpen) return;
+    const closeOutside = (event: PointerEvent) => { if (!workspaceMenuRef.current?.contains(event.target as HTMLElement)) setWorkspaceMenuOpen(false); };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setWorkspaceMenuOpen(false); };
+    window.addEventListener("pointerdown", closeOutside); window.addEventListener("keydown", closeOnEscape);
+    return () => { window.removeEventListener("pointerdown", closeOutside); window.removeEventListener("keydown", closeOnEscape); };
+  }, [workspaceMenuOpen]);
   if (!state) return <Welcome onReady={(value) => { setState(value); setPrimary(value.snapshot.project.defaultLanguage); setSecondary(value.snapshot.project.languages.find((language) => language !== value.snapshot.project.defaultLanguage) ?? value.snapshot.project.defaultLanguage); setConversationId(value.snapshot.conversations[0]?.id ?? null); }} />;
   const snapshot = state.snapshot; const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId) ?? null;
-  const chooseWorkspace = (id: Workspace) => { setWorkspace(id); setNavigatorOpen(false); setInspectorOpen(false); };
+  const chooseWorkspace = (id: Workspace) => { setWorkspace(id); setNavigatorOpen(false); setInspectorOpen(false); setWorkspaceMenuOpen(false); };
   const chooseConversation = (id: string) => { setConversationId(id); setWorkspace("graph"); setNavigatorOpen(false); setInspectorOpen(false); };
   const selectNode = (id: string) => { setSelectedNodeId(id); setInspectorOpen(true); };
   const jumpIssue = (issue: ValidationIssue) => { if (issue.conversationId) setConversationId(issue.conversationId); setWorkspace("graph"); setNavigatorOpen(false); window.setTimeout(() => { const node = graph?.nodes.find((candidate) => candidate.lineId === issue.lineId); if (node) { setSelectedNodeId(node.id); setInspectorOpen(true); } }, 100); };
@@ -231,7 +245,15 @@ export function App() {
     <header className="command-bar">
       <div className="brand"><img src={reedLogo} alt="" /><b>Reed</b><i /><em>{snapshot.project.name}</em></div>
       <div className="compact-panel-actions"><button className={navigatorOpen ? "active" : ""} aria-expanded={navigatorOpen} onClick={() => { setNavigatorOpen((value) => !value); setInspectorOpen(false); }}>Project</button>{(workspace === "graph" || workspace === "translation") && graph && <button className={inspectorOpen ? "active" : ""} aria-expanded={inspectorOpen} onClick={() => { setInspectorOpen((value) => !value); setNavigatorOpen(false); }}>Inspector</button>}</div>
-      <div className="workspace-tabs">{workspaces.map((item) => <button key={item.id} className={workspace === item.id ? "active" : ""} onClick={() => chooseWorkspace(item.id)}>{item.label}<kbd>⌘{item.key}</kbd></button>)}</div>
+      <div className="workspace-navigation">
+        <div className="workspace-tabs" aria-label="Authoring workspaces">{primaryWorkspaces.map((item) => <button key={item.id} className={workspace === item.id ? "active" : ""} aria-current={workspace === item.id ? "page" : undefined} onClick={() => chooseWorkspace(item.id)}>{item.label}<kbd>⌘{item.key}</kbd></button>)}</div>
+        <div className="workspace-more" ref={workspaceMenuRef}>
+          <button className={`workspace-more-trigger ${secondaryWorkspaceGroups.some((group) => group.items.some((item) => item.id === workspace)) ? "active" : ""}`} aria-haspopup="menu" aria-expanded={workspaceMenuOpen} aria-label="More workspaces" onClick={() => setWorkspaceMenuOpen((value) => !value)}>More<span aria-hidden="true">⌄</span></button>
+          <div className={`workspace-menu ${workspaceMenuOpen ? "open" : ""}`} role="menu" aria-label="More workspaces" aria-hidden={!workspaceMenuOpen}>
+            {secondaryWorkspaceGroups.map((group) => <div className="workspace-menu-section" key={group.label} role="group" aria-label={group.label}><span className="workspace-menu-label">{group.label}</span>{group.items.map((item) => <button key={item.id} role="menuitem" tabIndex={workspaceMenuOpen ? 0 : -1} className={workspace === item.id ? "active" : ""} aria-current={workspace === item.id ? "page" : undefined} onClick={() => chooseWorkspace(item.id)}><span>{item.label}</span><kbd>⌘{item.key}</kbd></button>)}</div>)}
+          </div>
+        </div>
+      </div>
       <div className="command-actions"><div className="search"><span>⌕</span><input value={search} aria-label="Search dialogue" placeholder="Text, Line ID, tag…" onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void doSearch(); }} />{results.length > 0 && <div className="search-results">{results.map((result) => <button key={`${result.lineId}-${result.language}`} onClick={() => { chooseConversation(result.conversationId); setResults([]); }}>{result.text}<small>{result.lineId} · {result.language}</small></button>)}</div>}</div><button className="save-button" onClick={() => void window.reed.mutate("createBackup", { label: "Manual" }).then(() => setNotice("Named backup saved"))}>Save version</button><button className="export-button" onClick={() => chooseWorkspace("production")}>Export</button></div>
     </header>
     <Navigator snapshot={snapshot} selectedConversationId={conversationId} open={navigatorOpen} onConversation={chooseConversation} onScene={() => chooseWorkspace("beats")} onClose={() => setNavigatorOpen(false)} />

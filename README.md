@@ -19,7 +19,7 @@ Reed currently targets Node 22+ and pnpm 11. Dependency installation is the deve
 
 ### Download the Mac app
 
-Download the latest Apple-silicon DMG from the [Reed releases page](https://github.com/is2b007/Reed/releases/latest), open it, and drag **Reed** into Applications. This first release is an unsigned development build. If macOS says it cannot verify Reed, close the alert, then Control-click **Reed.app** in Applications, choose **Open**, and confirm **Open** once. After that, Reed opens normally.
+Download the latest Apple-silicon DMG from the [Reed releases page](https://github.com/is2b007/Reed/releases/latest), open it, and drag **Reed** into Applications. Reed is locally signed but not yet Apple-notarized. If macOS says it cannot verify Reed, close the alert, then Control-click **Reed.app** in Applications, choose **Open**, and confirm **Open** once. After that, Reed opens normally.
 
 The GitHub repository is the source-code project. The DMG and ZIP on the releases page are the installable app; opening the repository page itself will not launch Reed.
 
@@ -42,7 +42,7 @@ Build the local macOS application bundle:
 CI=true pnpm --filter @reed/editor package
 ```
 
-The unsigned development app is written to `apps/editor/out/Reed-darwin-arm64/Reed.app`. Signing and notarization require the distributor's Apple Developer certificate and credentials.
+The locally signed development app is written to `apps/editor/out/Reed-darwin-arm64/Reed.app`. Apple Developer signing and notarization require the distributor's certificate and credentials.
 
 ## Start using Reed
 

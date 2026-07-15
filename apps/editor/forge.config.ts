@@ -1,6 +1,9 @@
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { rebuild } from "@electron/rebuild";
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdirSync } from "node:fs";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MakerDMG } from "@electron-forge/maker-dmg";
@@ -12,6 +15,8 @@ import { rendererConfig } from "./webpack.renderer.config.js";
 
 const configDirectory = path.dirname(fileURLToPath(import.meta.url));
 const hoistedModules = path.resolve(configDirectory, "../../node_modules");
+const dmgStagingDirectory = path.join(tmpdir(), `reed-dmg-${process.pid}`);
+const dmgStagingApp = path.join(dmgStagingDirectory, "Reed.app");
 
 const includeNativeRuntime: NonNullable<ForgeConfig["packagerConfig"]>["afterPrune"] = [
   (buildPath, _electronVersion, _platform, _arch, callback) => {
@@ -54,8 +59,25 @@ const config: ForgeConfig = {
     },
     afterPrune: includeNativeRuntime,
   },
+  hooks: {
+    postMake: async (_forgeConfig, makeResults) => {
+      await rm(dmgStagingDirectory, { recursive: true, force: true });
+      return makeResults;
+    },
+  },
   rebuildConfig: {},
-  makers: [new MakerZIP({}, ["darwin"]), new MakerDMG({ format: "ULFO" })],
+  makers: [new MakerZIP({}, ["darwin"]), new MakerDMG({
+    format: "ULFO",
+    contents: (options) => {
+      mkdirSync(dmgStagingDirectory, { recursive: true });
+      execFileSync("/usr/bin/ditto", ["--noextattr", "--noqtn", options.appPath, dmgStagingApp]);
+      execFileSync("/usr/bin/xattr", ["-cr", dmgStagingApp]);
+      return [
+        { x: 448, y: 344, type: "link", path: "/Applications" },
+        { x: 192, y: 344, type: "file", path: dmgStagingApp },
+      ];
+    },
+  })],
   plugins: [
     new AutoUnpackNativesPlugin({}),
     new WebpackPlugin({
