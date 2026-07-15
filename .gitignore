@@ -30,3 +30,4 @@ exports/
 # test artifacts
 playwright-report/
 test-results/
+.gstack/
