@@ -360,7 +360,7 @@ export class ReedProject {
     const result = this.db.transaction(() => {
       this.db.prepare("INSERT INTO levels(id, project_id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
         .run(id, project.id, input.name, input.sortOrder, timestamp, timestamp);
-      return this.commitProjectMutation(project, "level.create", input.source, { id, name: input.name });
+      return this.commitProjectMutation(project, "level.create", input.source, { id, name: input.name }, input.expectedVersion);
     }).immediate();
     return { value: mapLevel(this.db.prepare("SELECT * FROM levels WHERE id = ?").get(id) as Row), ...result };
   }
@@ -384,7 +384,7 @@ export class ReedProject {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         id, project.id, input.name, input.scopeType, input.scopeId, input.baseId, input.rangeSize, input.exportOrder, timestamp, timestamp,
       );
-      return this.commitProjectMutation(project, "partition.create", input.source, { id, ...input });
+      return this.commitProjectMutation(project, "partition.create", input.source, { id, ...input }, input.expectedVersion);
     }).immediate();
     const value = this.listPartitions().find((partition) => partition.id === id);
     if (!value) throw new NotFoundError("Database partition", id);
@@ -412,7 +412,7 @@ export class ReedProject {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         id, project.id, input.levelId ?? null, partition.id, input.name, input.slug, prefix, input.beatRef, input.sortOrder, timestamp, timestamp,
       );
-      return this.commitProjectMutation(project, "scene.create", input.source, { id, name: input.name, lineIdPrefix: prefix });
+      return this.commitProjectMutation(project, "scene.create", input.source, { id, name: input.name, lineIdPrefix: prefix }, input.expectedVersion);
     }).immediate();
     return { value: mapScene(this.db.prepare("SELECT * FROM scenes WHERE id = ?").get(id) as Row), ...result };
   }
@@ -441,7 +441,7 @@ export class ReedProject {
       this.db.prepare(`INSERT INTO dialogue_nodes
         (id, conversation_id, line_id, entry_numeric_id, kind, spoken_language, line_status, created_at, updated_at)
         VALUES (?, ?, ?, 0, 'start', ?, 'final', ?, ?)`).run(startId, id, startLineId, project.defaultLanguage, timestamp, timestamp);
-      return this.commitProjectMutation(project, "conversation.create", input.source, { id, sceneId: input.sceneId, numericId, startNodeId: startId });
+      return this.commitProjectMutation(project, "conversation.create", input.source, { id, sceneId: input.sceneId, numericId, startNodeId: startId }, input.expectedVersion);
     }).immediate();
     return { value: this.getConversation(id), ...result };
   }
@@ -455,12 +455,12 @@ export class ReedProject {
     this.assertCharacter(input.listenerCharacterId);
     const project = this.getProject();
     const scene = this.db.prepare("SELECT line_id_prefix FROM scenes WHERE id = ?").get(conversation.sceneId) as Row;
-    const next = this.db.prepare("SELECT COALESCE(MAX(entry_numeric_id), 0) + 1 AS value FROM dialogue_nodes WHERE conversation_id = ?").get(conversation.id) as Row;
     const id = randomUUID();
     const lineId = this.allocateLineId(String(scene.line_id_prefix));
     const timestamp = now();
     const spokenLanguage = input.spokenLanguage ?? project.defaultLanguage;
     const result = this.db.transaction(() => {
+      const next = this.db.prepare("SELECT COALESCE(MAX(entry_numeric_id), 0) + 1 AS value FROM dialogue_nodes WHERE conversation_id = ?").get(conversation.id) as Row;
       this.db.prepare(`INSERT INTO dialogue_nodes
         (id, conversation_id, line_id, entry_numeric_id, kind, speaker_character_id, listener_character_id,
          spoken_language, is_terminal, x, y, created_at, updated_at)
@@ -474,7 +474,7 @@ export class ReedProject {
           .run(id, spokenLanguage, input.text ?? "", input.menuText ?? null, timestamp, timestamp);
         this.refreshSearch(lineId, spokenLanguage, input.text ?? "", input.menuText ?? null);
       }
-      return this.commitConversationMutation(conversation, "node.create", input.source, { id, lineId, entryNumericId: Number(next.value), kind: input.kind });
+      return this.commitConversationMutation(conversation, "node.create", input.source, { id, lineId, entryNumericId: Number(next.value), kind: input.kind }, input.expectedVersion);
     }).immediate();
     return { value: this.getNodeByLineId(lineId), ...result };
   }
@@ -504,7 +504,7 @@ export class ReedProject {
       );
       return this.commitConversationMutation(conversation, "link.create", input.source, {
         id, originNodeId: input.originNodeId, destinationNodeId: input.destinationNodeId,
-      });
+      }, input.expectedVersion);
     }).immediate();
     return { value: mapLink(this.db.prepare("SELECT * FROM dialogue_links WHERE id = ?").get(id) as Row), ...result };
   }
@@ -524,7 +524,7 @@ export class ReedProject {
     if (touchesFinal && input.source === "agent") throw new GuardrailError("Agents cannot unlink final content");
     const result = this.db.transaction(() => {
       this.db.prepare("DELETE FROM dialogue_links WHERE id = ?").run(input.linkId);
-      return this.commitConversationMutation(conversation, "link.delete", input.source, { linkId: input.linkId, originNodeId: link.origin_node_id, destinationNodeId: link.destination_node_id });
+      return this.commitConversationMutation(conversation, "link.delete", input.source, { linkId: input.linkId, originNodeId: link.origin_node_id, destinationNodeId: link.destination_node_id }, input.expectedVersion);
     }).immediate();
     return { value: { deletedLinkId: input.linkId }, ...result };
   }
@@ -565,7 +565,7 @@ export class ReedProject {
       const assignments = updates.map(([column]) => `${column} = ?`).join(", ");
       this.db.prepare(`UPDATE dialogue_nodes SET ${assignments}, updated_at = ? WHERE id = ?`)
         .run(...updates.map((entry) => entry[1]), timestamp, node.id);
-      return this.commitConversationMutation(conversation, "node.update", input.source, { lineId: input.lineId, fields: Object.fromEntries(updates) });
+      return this.commitConversationMutation(conversation, "node.update", input.source, { lineId: input.lineId, fields: Object.fromEntries(updates) }, input.expectedVersion);
     }).immediate();
     return { value: this.getNodeByLineId(input.lineId), ...result };
   }
@@ -583,7 +583,7 @@ export class ReedProject {
     const result = this.db.transaction(() => {
       this.db.prepare("DELETE FROM line_search WHERE line_id = ?").run(input.lineId);
       this.db.prepare("DELETE FROM dialogue_nodes WHERE id = ?").run(node.id);
-      return this.commitConversationMutation(conversation, "node.delete", input.source, { lineId: input.lineId, entryNumericId: node.entry_numeric_id });
+      return this.commitConversationMutation(conversation, "node.delete", input.source, { lineId: input.lineId, entryNumericId: node.entry_numeric_id }, input.expectedVersion);
     }).immediate();
     return { value: { deletedLineId: input.lineId }, ...result };
   }
@@ -679,7 +679,7 @@ export class ReedProject {
       return this.commitConversationMutation(conversation, "text.set", input.source, {
         lineId: input.lineId, language: input.language, before: existing ? { text: existing.dialogue_text, menuText: existing.menu_text } : null,
         after: { text: input.text, menuText }, voiceNeedsRework, lineNeedsRework,
-      });
+      }, input.expectedVersion);
     }).immediate();
     return { value: this.getNodeByLineId(input.lineId), ...result };
   }
@@ -701,7 +701,7 @@ export class ReedProject {
     const result = this.db.transaction(() => {
       this.db.prepare("UPDATE dialogue_nodes SET line_status = ?, voice_status = CASE WHEN ? THEN 'rework' ELSE voice_status END, updated_at = ? WHERE id = ?")
         .run(input.status, voiceNeedsRework ? 1 : 0, timestamp, node.id);
-      return this.commitConversationMutation(conversation, "line.status", input.source, { lineId: input.lineId, before: node.line_status, after: input.status, voiceNeedsRework });
+      return this.commitConversationMutation(conversation, "line.status", input.source, { lineId: input.lineId, before: node.line_status, after: input.status, voiceNeedsRework }, input.expectedVersion);
     }).immediate();
     return { value: this.getNodeByLineId(input.lineId), ...result };
   }
@@ -717,7 +717,7 @@ export class ReedProject {
     const timestamp = now();
     const result = this.db.transaction(() => {
       this.db.prepare("UPDATE dialogue_nodes SET voice_status = ?, updated_at = ? WHERE id = ?").run(input.status, timestamp, node.id);
-      return this.commitConversationMutation(conversation, "voice.status", input.source, { lineId: input.lineId, before: node.voice_status, after: input.status });
+      return this.commitConversationMutation(conversation, "voice.status", input.source, { lineId: input.lineId, before: node.voice_status, after: input.status }, input.expectedVersion);
     }).immediate();
     return { value: this.getNodeByLineId(input.lineId), ...result };
   }
@@ -741,7 +741,7 @@ export class ReedProject {
         id, project.id, nextNumeric, input.name, JSON.stringify(input.displayNames), input.isPlayer ? 1 : 0, input.portraitPath,
         input.description, input.actorNotes, input.voiceNotes, existing?.created_at ?? timestamp, timestamp,
       );
-      return this.commitProjectMutation(project, existing ? "character.update" : "character.create", input.source, { id, name: input.name });
+      return this.commitProjectMutation(project, existing ? "character.update" : "character.create", input.source, { id, name: input.name }, input.expectedVersion);
     }).immediate();
     const value = this.listCharacters().find((character) => character.id === id);
     if (!value) throw new NotFoundError("Character", id);
@@ -771,7 +771,7 @@ export class ReedProject {
           description = excluded.description, updated_at = excluded.updated_at`).run(
         id, project.id, numericId, input.name, input.type, JSON.stringify(input.initialValue), input.description, existing?.created_at ?? timestamp, timestamp,
       );
-      return this.commitProjectMutation(project, existing ? "variable.update" : "variable.create", input.source, { id, name: input.name, type: input.type });
+      return this.commitProjectMutation(project, existing ? "variable.update" : "variable.create", input.source, { id, name: input.name, type: input.type }, input.expectedVersion);
     }).immediate();
     const value = this.listVariables().find((variable) => variable.id === id);
     if (!value) throw new NotFoundError("Variable", id);
@@ -783,10 +783,11 @@ export class ReedProject {
     await mkdir(this.paths.backups, { recursive: true });
     const timestamp = now();
     const stamp = timestamp.replace(/[:.]/g, "-");
-    const filename = `${stamp}-${kind}${label ? `-${safeFilePart(label)}` : ""}.sqlite`;
+    const id = randomUUID();
+    const filename = `${stamp}-${id.slice(0, 8)}-${kind}${label ? `-${safeFilePart(label)}` : ""}.sqlite`;
     const filePath = path.join(this.paths.backups, filename);
     await this.db.backup(filePath);
-    const record: BackupRecord = { id: randomUUID(), projectId: project.id, kind, label, filePath, createdAt: timestamp };
+    const record: BackupRecord = { id, projectId: project.id, kind, label, filePath, createdAt: timestamp };
     this.db.prepare("INSERT INTO backup_records(id, project_id, kind, label, file_path, created_at) VALUES (?, ?, ?, ?, ?, ?)")
       .run(record.id, record.projectId, record.kind, record.label, record.filePath, record.createdAt);
     if (kind === "rolling") await this.pruneRollingBackups();
@@ -906,26 +907,30 @@ export class ReedProject {
     throw new ConcurrencyError(aggregateId, expected, current, changes);
   }
 
-  private commitProjectMutation(project: ProjectRecord, operation: string, source: MutationSource, changes: unknown): { version: number; changeSequence: number } {
-    const version = project.version + 1;
+  private commitProjectMutation(project: ProjectRecord, operation: string, source: MutationSource, changes: unknown, expectedVersion?: number): { version: number; changeSequence: number } {
+    const current = this.getProject();
+    this.assertVersion("project", current.id, expectedVersion, current.version);
+    const version = current.version + 1;
     const timestamp = now();
-    this.db.prepare("UPDATE projects SET version = ?, updated_at = ? WHERE id = ?").run(version, timestamp, project.id);
+    this.db.prepare("UPDATE projects SET version = ?, updated_at = ? WHERE id = ?").run(version, timestamp, current.id);
     const result = this.db.prepare(`INSERT INTO mutation_log
       (project_id, aggregate_type, aggregate_id, conversation_id, base_version, new_version, operation, source, changes_json, created_at)
       VALUES (?, 'project', ?, NULL, ?, ?, ?, ?, ?, ?)`).run(
-      project.id, project.id, project.version, version, operation, source, JSON.stringify(changes), timestamp,
+      current.id, current.id, current.version, version, operation, source, JSON.stringify(changes), timestamp,
     );
     return { version, changeSequence: Number(result.lastInsertRowid) };
   }
 
-  private commitConversationMutation(conversation: ConversationRecord, operation: string, source: MutationSource, changes: unknown): { version: number; changeSequence: number } {
-    const version = conversation.version + 1;
+  private commitConversationMutation(conversation: ConversationRecord, operation: string, source: MutationSource, changes: unknown, expectedVersion?: number): { version: number; changeSequence: number } {
+    const current = this.requireConversation(conversation.id);
+    this.assertVersion("conversation", current.id, expectedVersion, current.version);
+    const version = current.version + 1;
     const timestamp = now();
-    this.db.prepare("UPDATE conversations SET version = ?, updated_at = ? WHERE id = ?").run(version, timestamp, conversation.id);
+    this.db.prepare("UPDATE conversations SET version = ?, updated_at = ? WHERE id = ?").run(version, timestamp, current.id);
     const result = this.db.prepare(`INSERT INTO mutation_log
       (project_id, aggregate_type, aggregate_id, conversation_id, base_version, new_version, operation, source, changes_json, created_at)
       VALUES (?, 'conversation', ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-      conversation.projectId, conversation.id, conversation.id, conversation.version, version, operation, source, JSON.stringify(changes), timestamp,
+      current.projectId, current.id, current.id, current.version, version, operation, source, JSON.stringify(changes), timestamp,
     );
     return { version, changeSequence: Number(result.lastInsertRowid) };
   }
