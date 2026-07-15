@@ -125,7 +125,7 @@ async function createWindow(): Promise<void> {
 
 app.setName("Reed");
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
-app.on("before-quit", () => reed?.close());
+app.on("will-quit", () => { reed?.close(); reed = null; });
 app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) void createWindow(); });
 
 void app.whenReady().then(async () => {
