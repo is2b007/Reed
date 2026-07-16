@@ -5,7 +5,7 @@ import {
 } from "@xyflow/react";
 import type {
   CharacterRecord, ConversationGraph, DialogueNodeRecord, MutationRecord, ProjectSnapshot,
-  SearchResult, ValidationIssue, ValidationReport,
+  SearchResult, ValidationIssue, ValidationReport, VariableRecord,
 } from "@reed/core";
 import type { EditorBootstrap, MutationName } from "./contract.js";
 import { evaluatePlaytestCondition, globalShortcut, nextMenuIndex, promptValueIsValid } from "./ui-logic.js";
@@ -272,13 +272,43 @@ function CharacterEditor({ character, languages, projectVersion, lineCount, open
   </article>;
 }
 
+function VariableEditor({ variable, projectVersion, open, onOpen, onClose, onSaved }: { variable: VariableRecord; projectVersion: number; open: boolean; onOpen(): void; onClose(): void; onSaved(): Promise<void> }) {
+  const initialEditorValue = () => variable.type === "boolean" ? Boolean(variable.initialValue) : String(variable.initialValue);
+  const [type, setType] = useState<VariableRecord["type"]>(variable.type);
+  const [initialValue, setInitialValue] = useState<string | boolean>(initialEditorValue);
+  const [description, setDescription] = useState(variable.description);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const reset = () => { setType(variable.type); setInitialValue(initialEditorValue()); setDescription(variable.description); setError(""); };
+  const changeType = (next: VariableRecord["type"]) => { setType(next); setInitialValue(next === "boolean" ? false : next === "number" ? "0" : ""); };
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const parsedInitialValue = type === "boolean" ? Boolean(initialValue) : type === "number" ? Number(initialValue) : String(initialValue);
+    if (type === "number" && (String(initialValue).trim() === "" || !Number.isFinite(parsedInitialValue))) { setError("Enter a valid number."); return; }
+    try {
+      setSaving(true); setError("");
+      await window.reed.mutate("declareVariable", { name: variable.name, type, initialValue: parsedInitialValue, description, expectedVersion: projectVersion, source: "human" });
+      await onSaved(); onClose();
+    } catch (value) { setError(message(value)); } finally { setSaving(false); }
+  };
+  return <article className={`variable-card ${open ? "editing" : ""}`}><div className="registry-card-heading"><div><code>{variable.name}</code><span>{variable.type} · ID {variable.numericId}</span>{variable.description && <p>{variable.description}</p>}</div><button type="button" onClick={open ? () => { reset(); onClose(); } : onOpen}>{open ? "Cancel" : "Edit"}</button></div>
+    {open && <form className="metadata-form" onSubmit={(event) => void save(event)}><div className="metadata-grid"><label>Variable name<input value={variable.name} readOnly aria-readonly="true" /></label><label>Type<select value={type} onChange={(event) => changeType(event.target.value as VariableRecord["type"])}><option value="boolean">Boolean</option><option value="number">Number</option><option value="text">Text</option></select></label></div>
+      <label>Initial value{type === "boolean" ? <span className="checkbox-control"><input type="checkbox" checked={Boolean(initialValue)} onChange={(event) => setInitialValue(event.target.checked)} />{Boolean(initialValue) ? "True" : "False"}</span> : <input type={type === "number" ? "number" : "text"} value={String(initialValue)} onChange={(event) => setInitialValue(event.target.value)} />}</label>
+      <label>Variable description<textarea rows={3} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+      {error && <div className="error-banner" role="alert">{error}</div>}
+      <div className="metadata-actions"><button type="button" onClick={() => { reset(); onClose(); }}>Cancel</button><button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save variable"}</button></div>
+    </form>}
+  </article>;
+}
+
 function Characters({ snapshot, refresh }: { snapshot: ProjectSnapshot; refresh(): Promise<void> }) {
   const prompt = usePrompt();
   const [editingCharacterId, setEditingCharacterId] = useState<string | null>(null);
+  const [editingVariableName, setEditingVariableName] = useState<string | null>(null);
   const add = async () => { const name = await prompt({ title: "Add character", label: "Character name", confirmLabel: "Create character" }); if (!name) return; const result = await window.reed.mutate("upsertCharacter", { name, displayNames: {}, isPlayer: false, portraitPath: null, description: "", actorNotes: "", voiceNotes: "", expectedVersion: snapshot.project.version, source: "human" }) as { value?: { id?: string } }; await refresh(); if (result.value?.id) setEditingCharacterId(result.value.id); };
-  const addVariable = async () => { const name = await prompt({ title: "Add variable", label: "Variable name", confirmLabel: "Choose type" }); if (!name) return; const requested = await prompt({ title: `Set type for ${name}`, label: "Variable type", confirmLabel: "Create variable", options: [{ value: "boolean", label: "Boolean" }, { value: "number", label: "Number" }, { value: "text", label: "Text" }] }); if (!requested) return; const initialValue = requested === "boolean" ? false : requested === "number" ? 0 : ""; await window.reed.mutate("declareVariable", { name, type: requested, initialValue, description: "", source: "human" }); await refresh(); };
+  const addVariable = async () => { const name = await prompt({ title: "Add variable", label: "Variable name", confirmLabel: "Choose type" }); if (!name) return; const requested = await prompt({ title: `Set type for ${name}`, label: "Variable type", confirmLabel: "Create variable", options: [{ value: "boolean", label: "Boolean" }, { value: "number", label: "Number" }, { value: "text", label: "Text" }] }); if (!requested) return; const initialValue = requested === "boolean" ? false : requested === "number" ? 0 : ""; const result = await window.reed.mutate("declareVariable", { name, type: requested, initialValue, description: "", expectedVersion: snapshot.project.version, source: "human" }) as { value?: { name?: string } }; await refresh(); if (result.value?.name) setEditingVariableName(result.value.name); };
   const usage = (id: string) => snapshot.conversations.reduce((total, conversation) => total + conversation.nodes.filter((node) => node.speakerCharacterId === id).length, 0);
-  return <div className="characters"><header><div><p className="eyebrow">Cast registry</p><h2>Characters</h2></div><button className="primary" onClick={() => void add()}>Add character</button></header><div className="character-list">{snapshot.characters.map((character) => <CharacterEditor key={`${character.id}-${character.updatedAt}`} character={character} languages={snapshot.project.languages} projectVersion={snapshot.project.version} lineCount={usage(character.id)} open={editingCharacterId === character.id} onOpen={() => setEditingCharacterId(character.id)} onClose={() => setEditingCharacterId(null)} onSaved={refresh} />)}</div><section className="variable-registry"><header><div><p className="eyebrow">Condition contract</p><h2>Declared variables</h2></div><button onClick={() => void addVariable()}>Add variable</button></header>{snapshot.variables.length ? <div>{snapshot.variables.map((variable) => <article key={variable.id}><code>{variable.name}</code><span>{variable.type}</span><strong>{JSON.stringify(variable.initialValue)}</strong><small>ID {variable.numericId}</small></article>)}</div> : <p>No variables declared.</p>}</section></div>;
+  return <div className="characters"><header><div><p className="eyebrow">Cast registry</p><h2>Characters</h2></div><button className="primary" onClick={() => void add()}>Add character</button></header><div className="character-list">{snapshot.characters.map((character) => <CharacterEditor key={`${character.id}-${character.updatedAt}`} character={character} languages={snapshot.project.languages} projectVersion={snapshot.project.version} lineCount={usage(character.id)} open={editingCharacterId === character.id} onOpen={() => setEditingCharacterId(character.id)} onClose={() => setEditingCharacterId(null)} onSaved={refresh} />)}</div><section className="variable-registry"><header><div><p className="eyebrow">Condition contract</p><h2>Declared variables</h2></div><button onClick={() => void addVariable()}>Add variable</button></header>{snapshot.variables.length ? <div>{snapshot.variables.map((variable) => <VariableEditor key={`${variable.id}-${variable.updatedAt}`} variable={variable} projectVersion={snapshot.project.version} open={editingVariableName === variable.name} onOpen={() => setEditingVariableName(variable.name)} onClose={() => setEditingVariableName(null)} onSaved={refresh} />)}</div> : <p>No variables declared.</p>}</section></div>;
 }
 
 function Validation({ report, onJump }: { report: ValidationReport; onJump(issue: ValidationIssue): void }) {
