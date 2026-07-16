@@ -71,6 +71,7 @@ button.tree-heading { width:100%; border:0; background:transparent; text-align:l
 .inspector label { display:grid; gap:5px; margin-bottom:9px; color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.05em; }
 .inspector input, .inspector textarea, .inspector select { color:var(--text); font-size:12px; text-transform:none; letter-spacing:0; }
 .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.inspector label.inspector-checkbox { display:flex; align-items:center; grid-template-columns:none; gap:8px; min-height:28px; }.inspector-checkbox input { width:15px; height:15px; margin:0; }.inspector-checkbox span { color:var(--sub); }
 .inspector-id { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:11px; color:var(--reed2); }
 .inspector-id button { font-family:"IBM Plex Sans"; font-size:10px; padding:3px 6px; }
 .language-label>span { color:var(--reed2); }
