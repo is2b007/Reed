@@ -76,6 +76,7 @@ button.tree-heading { width:100%; border:0; background:transparent; text-align:l
 .language-label>span { color:var(--reed2); }
 .language-label.secondary>span { color:var(--info); }
 .language-label.secondary textarea { color:#c7dcea; }
+.language-editor { display:grid; gap:8px; padding-bottom:14px; }.language-editor+.language-editor { margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }.language-editor>label { margin:0; }.language-editor>button { justify-self:end; font-size:10px; }
 .code { font-family:"IBM Plex Mono"; color:#d3d9ba !important; }
 .danger-action { margin:14px 12px; color:#efaaa4; border-color:#7a423e; background:#271817; }
 .error-banner { margin:10px 0; padding:9px 11px; border-left:2px solid var(--bad); background:#2a1b1a; color:#f0b9b4; font-size:11px; }
