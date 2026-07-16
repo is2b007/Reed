@@ -30,6 +30,10 @@ async function sourceFiles(root) {
 try {
   run(path.join(repository, "scripts", "create-demo.mjs"), [projectRoot]);
   const cli = path.join(repository, "packages", "cli", "dist", "index.js");
+  const cliScenes = JSON.parse(run(cli, ["--project", projectRoot, "--json", "list-scenes"])).data;
+  run(cli, ["--project", projectRoot, "--json", "update-scene", cliScenes[0].id, "--beat-ref", "CLI/Offline beat"]);
+  const cliConversations = JSON.parse(run(cli, ["--project", projectRoot, "--json", "list-conversations"])).data;
+  run(cli, ["--project", projectRoot, "--json", "update-conversation", cliConversations[0].id, "--description", "Updated offline through the CLI"]);
   run(cli, ["--project", projectRoot, "--json", "validate"]);
   run(cli, ["--project", projectRoot, "--json", "backup", "Offline smoke"]);
   run(cli, ["--project", projectRoot, "--json", "export-project"]);
@@ -46,7 +50,16 @@ try {
   });
   await client.connect(transport);
   const tools = await client.listTools();
-  if (!tools.tools.some((tool) => tool.name === "import_conversation_json") || !tools.tools.some((tool) => tool.name === "export_pixelcrushers")) throw new Error("MCP tool surface is incomplete");
+  const requiredTools = ["import_conversation_json", "export_pixelcrushers", "update_scene", "update_conversation"];
+  if (requiredTools.some((name) => !tools.tools.some((tool) => tool.name === name))) throw new Error("MCP tool surface is incomplete");
+  const mcpScenes = await client.callTool({ name: "list_scenes", arguments: {} });
+  const mcpScenePayload = JSON.parse(mcpScenes.content.find((item) => item.type === "text")?.text ?? "{}");
+  const mcpScene = mcpScenePayload.data?.[0];
+  if (!mcpScene || (await client.callTool({ name: "update_scene", arguments: { id: mcpScene.id, beatRef: "MCP/Offline beat" } })).isError) throw new Error("MCP scene metadata update failed offline");
+  const mcpConversations = await client.callTool({ name: "list_conversations", arguments: {} });
+  const mcpConversationPayload = JSON.parse(mcpConversations.content.find((item) => item.type === "text")?.text ?? "{}");
+  const mcpConversation = mcpConversationPayload.data?.[0];
+  if (!mcpConversation || (await client.callTool({ name: "update_conversation", arguments: { id: mcpConversation.id, description: "Updated offline through MCP", expectedVersion: mcpConversation.version } })).isError) throw new Error("MCP conversation metadata update failed offline");
   const validation = await client.callTool({ name: "get_validation_report", arguments: {} });
   if (validation.isError) throw new Error("MCP validation failed offline");
   await client.close();
