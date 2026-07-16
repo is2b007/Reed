@@ -101,7 +101,7 @@ function registerIpc(): void {
 }
 
 async function createWindow(): Promise<void> {
-  window = new BrowserWindow({
+  const createdWindow = new BrowserWindow({
     width: 1500, height: 940, minWidth: 600, minHeight: 560, backgroundColor: "#0e1210",
     title: "Reed", show: false,
     webPreferences: {
@@ -109,18 +109,23 @@ async function createWindow(): Promise<void> {
       contextIsolation: true, nodeIntegration: false, sandbox: true,
     },
   });
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  window.webContents.on("will-navigate", (event, url) => { if (url !== window?.webContents.getURL()) event.preventDefault(); });
-  await window.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
+  window = createdWindow;
+  createdWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  createdWindow.webContents.on("will-navigate", (event, url) => { if (url !== createdWindow.webContents.getURL()) event.preventDefault(); });
   const screenshotPath = requestedScreenshotPath();
+  if (!screenshotPath) {
+    createdWindow.once("ready-to-show", () => {
+      if (!createdWindow.isDestroyed()) createdWindow.show();
+    });
+  }
+  await createdWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
   if (screenshotPath) {
     await new Promise((resolve) => setTimeout(resolve, 3_000));
-    const image = await window.webContents.capturePage();
+    const image = await createdWindow.webContents.capturePage();
     await writeFile(path.resolve(screenshotPath), image.toPNG());
     app.quit();
     return;
   }
-  window.once("ready-to-show", () => window?.show());
 }
 
 app.setName("Reed");
