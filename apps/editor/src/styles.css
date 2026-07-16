@@ -4,6 +4,8 @@ html, body, #root { height:100%; margin:0; overflow:hidden; }
 button, input, textarea, select { font:inherit; color:inherit; }
 button { background:var(--raised); border:1px solid var(--line2); border-radius:2px; padding:6px 10px; cursor:pointer; transition-property:background-color,border-color,color,transform; transition-duration:80ms; transition-timing-function:ease-out; }
 button:hover { border-color:#6a786e; background:#273129; }
+button:disabled { cursor:not-allowed; opacity:.56; }
+button:disabled:hover { border-color:var(--line2); background:var(--raised); }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline:2px solid var(--reed2); outline-offset:1px; }
 button.primary, .export-button { background:var(--reed); border-color:var(--reed); color:#151a15; font-weight:600; }
 button.primary:hover, .export-button:hover { background:var(--reed2); border-color:var(--reed2); }
@@ -77,6 +79,17 @@ button.tree-heading { width:100%; border:0; background:transparent; text-align:l
 .code { font-family:"IBM Plex Mono"; color:#d3d9ba !important; }
 .danger-action { margin:14px 12px; color:#efaaa4; border-color:#7a423e; background:#271817; }
 .error-banner { margin:10px 0; padding:9px 11px; border-left:2px solid var(--bad); background:#2a1b1a; color:#f0b9b4; font-size:11px; }
+.prompt-backdrop { position:fixed; z-index:200; inset:0; display:grid; place-items:center; padding:16px; background:#080b09c7; }
+.prompt-dialog { width:min(440px,calc(100vw - 32px)); padding:20px; border:1px solid var(--line2); background:var(--panel); box-shadow:0 28px 80px #000c; }
+.prompt-dialog header { margin-bottom:18px; }
+.prompt-dialog h2 { margin:0; font-size:22px; font-weight:500; }
+.prompt-dialog header>p:last-child:not(.eyebrow) { margin:8px 0 0; color:var(--sub); font-size:12px; line-height:1.5; }
+.prompt-dialog label { display:grid; gap:7px; color:var(--sub); font-size:11px; }
+.prompt-dialog input, .prompt-dialog select { width:100%; margin-top:2px; }
+.prompt-dialog>small { display:block; margin-top:8px; color:var(--muted); font-size:10px; }
+.prompt-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+.prompt-actions .danger { color:#fff; border-color:#9f4d47; background:#773b37; font-weight:600; }
+.prompt-actions .danger:hover { border-color:#c66a62; background:#914943; }
 .dot { width:9px; height:9px; border-radius:50%; background:var(--muted); }
 .status-draft { --status:#7693ad; }.status-polished { --status:#71b5bd; }.status-edited { --status:#d4aa64; }.status-final { --status:#78b58a; }.status-rework { --status:#d7776f; }.status-placeholder { --status:#818d84; }
 .dot[class*="status-"] { background:var(--status); }
@@ -124,6 +137,7 @@ button.tree-heading { width:100%; border:0; background:transparent; text-align:l
 .playtest>main { width:min(680px,90%); margin:auto; padding:40px; }
 .play-line { margin:25px 0; padding:28px 30px; border-left:3px solid var(--reed); background:var(--panel); }.play-line span { color:var(--reed); font-size:11px; font-weight:600; text-transform:uppercase; }.play-line p { font-size:21px; line-height:1.45; }
 .choices button { display:flex; justify-content:space-between; align-items:center; width:100%; margin:8px 0; padding:12px 15px; text-align:left; }.choices small { color:var(--warn); }.end-marker { padding:20px; color:var(--muted); text-align:center; border:1px dashed var(--line2); }.reset { margin-top:18px; }
+.choices button:disabled { background:#171b18; color:var(--muted); }
 .translation { max-width:none; }.translation-grid { display:grid; grid-template-columns:210px repeat(5,minmax(190px,1fr)); border-top:1px solid var(--line2); border-left:1px solid var(--line2); min-width:1150px; }
 .tr-head, .tr-key, .tr-cell { min-height:55px; padding:9px; border:0; border-right:1px solid var(--line2); border-bottom:1px solid var(--line2); border-radius:0; text-align:left; }
 .tr-head { min-height:32px; background:#111713; color:var(--muted); font:10px "IBM Plex Mono"; }.tr-head.active { color:var(--reed); box-shadow:inset 0 -2px var(--reed); }

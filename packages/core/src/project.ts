@@ -460,12 +460,19 @@ export class ReedProject {
     const timestamp = now();
     const spokenLanguage = input.spokenLanguage ?? project.defaultLanguage;
     const result = this.db.transaction(() => {
-      const next = this.db.prepare("SELECT COALESCE(MAX(entry_numeric_id), 0) + 1 AS value FROM dialogue_nodes WHERE conversation_id = ?").get(conversation.id) as Row;
+      const liveMaximum = Number((this.db.prepare("SELECT COALESCE(MAX(entry_numeric_id), 0) AS value FROM dialogue_nodes WHERE conversation_id = ?").get(conversation.id) as Row).value);
+      const issuedMaximum = (this.db.prepare(`SELECT changes_json FROM mutation_log
+        WHERE aggregate_type = 'conversation' AND aggregate_id = ? AND operation IN ('node.create', 'node.delete')`).all(conversation.id) as Row[])
+        .reduce((maximum, row) => {
+          const issued = Number(parseJson<{ entryNumericId?: number }>(row.changes_json).entryNumericId ?? 0);
+          return Math.max(maximum, issued);
+        }, liveMaximum);
+      const entryNumericId = issuedMaximum + 1;
       this.db.prepare(`INSERT INTO dialogue_nodes
         (id, conversation_id, line_id, entry_numeric_id, kind, speaker_character_id, listener_character_id,
          spoken_language, is_terminal, x, y, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-        id, conversation.id, lineId, next.value, input.kind, input.speakerCharacterId ?? null,
+        id, conversation.id, lineId, entryNumericId, input.kind, input.speakerCharacterId ?? null,
         input.listenerCharacterId ?? null, spokenLanguage, input.isTerminal ? 1 : 0, input.x, input.y, timestamp, timestamp,
       );
       if (input.text !== undefined || input.menuText !== undefined) {
@@ -474,7 +481,7 @@ export class ReedProject {
           .run(id, spokenLanguage, input.text ?? "", input.menuText ?? null, timestamp, timestamp);
         this.refreshSearch(lineId, spokenLanguage, input.text ?? "", input.menuText ?? null);
       }
-      return this.commitConversationMutation(conversation, "node.create", input.source, { id, lineId, entryNumericId: Number(next.value), kind: input.kind }, input.expectedVersion);
+      return this.commitConversationMutation(conversation, "node.create", input.source, { id, lineId, entryNumericId, kind: input.kind }, input.expectedVersion);
     }).immediate();
     return { value: this.getNodeByLineId(lineId), ...result };
   }

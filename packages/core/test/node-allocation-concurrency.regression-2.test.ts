@@ -32,4 +32,26 @@ describe("dialogue node allocation", () => {
     expect(first.getChanges().filter((change) => change.aggregateType === "conversation").map((change) => [change.baseVersion, change.newVersion]))
       .toEqual([[1, 2], [2, 3]]);
   });
+
+  it("never reuses an entry numeric ID after its node is deleted", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "reed-node-delete-allocation-"));
+    const project = await ReedProject.create(root, {
+      name: "Permanent IDs", slug: "permanent-ids", languages: ["en"], defaultLanguage: "en",
+    });
+    openProjects.push(project);
+    const scene = (await project.createScene({ name: "Harbour", slug: "harbour" })).value;
+    const conversation = (await project.createConversation({ sceneId: scene.id, title: "Arrival" })).value;
+
+    const deleted = await project.addNode({ conversationId: conversation.id, text: "Temporary" });
+    await project.deleteNode({
+      lineId: deleted.value.lineId,
+      confirmation: deleted.value.lineId,
+      expectedVersion: deleted.version,
+    });
+    const replacement = await project.addNode({ conversationId: conversation.id, text: "Replacement" });
+
+    expect(deleted.value.entryNumericId).toBe(1);
+    expect(replacement.value.entryNumericId).toBe(2);
+    expect(replacement.value.lineId).not.toBe(deleted.value.lineId);
+  });
 });

@@ -8,6 +8,7 @@ import type {
   SearchResult, ValidationIssue, ValidationReport,
 } from "@reed/core";
 import type { EditorBootstrap, MutationName } from "./contract.js";
+import { evaluatePlaytestCondition, globalShortcut, nextMenuIndex, promptValueIsValid } from "./ui-logic.js";
 import reedLogo from "../assets/reed-logo.png";
 
 type Workspace = "graph" | "beats" | "playtest" | "translation" | "characters" | "validation" | "review" | "production" | "read";
@@ -27,6 +28,8 @@ const secondaryWorkspaceGroups = [
   { label: "Quality", items: workspaces.slice(5, 7) },
   { label: "Output", items: workspaces.slice(7) },
 ];
+const secondaryWorkspaces = secondaryWorkspaceGroups.flatMap((group) => group.items);
+const secondaryWorkspaceIndex = new Map(secondaryWorkspaces.map((workspace, index) => [workspace.id, index]));
 
 const DialogueCard = memo(({ data, selected }: NodeProps<CardNode>) => {
   const node = data.record;
@@ -46,6 +49,45 @@ DialogueCard.displayName = "DialogueCard";
 const nodeTypes = { dialogue: DialogueCard };
 
 function message(error: unknown): string { return error instanceof Error ? error.message : String(error); }
+
+interface PromptConfig {
+  title: string;
+  label: string;
+  description?: string;
+  defaultValue?: string;
+  confirmLabel?: string;
+  danger?: boolean;
+  requiredValue?: string;
+  options?: Array<{ value: string; label: string }>;
+}
+type PromptRequest = (config: PromptConfig) => Promise<string | null>;
+const PromptContext = React.createContext<PromptRequest | null>(null);
+
+function PromptDialog({ config, onFinish }: { config: PromptConfig; onFinish(value: string | null): void }) {
+  const [value, setValue] = useState(config.defaultValue ?? config.options?.[0]?.value ?? "");
+  const valid = promptValueIsValid(value, config.requiredValue);
+  return <div className="prompt-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onFinish(null); }}>
+    <form className="prompt-dialog" role="dialog" aria-modal="true" aria-labelledby="prompt-title" onSubmit={(event) => { event.preventDefault(); if (valid) onFinish(value); }} onKeyDown={(event) => { event.stopPropagation(); if (event.key === "Escape") { event.preventDefault(); onFinish(null); } }}>
+      <header><p className="eyebrow">Local project action</p><h2 id="prompt-title">{config.title}</h2>{config.description && <p>{config.description}</p>}</header>
+      <label>{config.label}{config.options ? <select autoFocus value={value} onChange={(event) => setValue(event.target.value)}>{config.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input autoFocus value={value} onChange={(event) => setValue(event.target.value)} />}</label>
+      {config.requiredValue !== undefined && <small>Enter the exact Line ID to enable deletion.</small>}
+      <div className="prompt-actions"><button type="button" onClick={() => onFinish(null)}>Cancel</button><button type="submit" className={config.danger ? "danger" : "primary"} disabled={!valid}>{config.confirmLabel ?? "Continue"}</button></div>
+    </form>
+  </div>;
+}
+
+function PromptProvider({ children }: { children: React.ReactNode }) {
+  const [active, setActive] = useState<{ config: PromptConfig; resolve(value: string | null): void } | null>(null);
+  const request = useCallback<PromptRequest>((config) => new Promise((resolve) => setActive({ config, resolve })), []);
+  const finish = (value: string | null) => { active?.resolve(value); setActive(null); };
+  return <PromptContext.Provider value={request}>{children}{active && <PromptDialog config={active.config} onFinish={finish} />}</PromptContext.Provider>;
+}
+
+function usePrompt(): PromptRequest {
+  const request = React.useContext(PromptContext);
+  if (!request) throw new Error("PromptProvider is missing");
+  return request;
+}
 
 function Welcome({ onReady }: { onReady(value: EditorBootstrap): void }) {
   const [creating, setCreating] = useState(false);
@@ -100,6 +142,7 @@ function Inspector({ graph, node, primary, secondary, languages, characters, ope
 }
 
 function InspectorForm({ graph, node, primary, secondary, languages, characters, open, onMutated, onClose }: { graph: ConversationGraph; node: DialogueNodeRecord; primary: string; secondary: string; languages: string[]; characters: CharacterRecord[]; open: boolean; onMutated(): Promise<void>; onClose(): void }) {
+  const prompt = usePrompt();
   const [primaryText, setPrimaryText] = useState(node.texts.find((value) => value.language === primary)?.text ?? "");
   const [secondaryText, setSecondaryText] = useState(node.texts.find((value) => value.language === secondary)?.text ?? "");
   const [conditions, setConditions] = useState(node.conditions); const [sequence, setSequence] = useState(node.sequence);
@@ -122,7 +165,7 @@ function InspectorForm({ graph, node, primary, secondary, languages, characters,
       <label className="language-label secondary"><span>{secondary.toUpperCase()} · reference</span><textarea rows={4} value={secondaryText} onChange={(event) => setSecondaryText(event.target.value)} onBlur={() => void mutate("setNodeText", { lineId: node.lineId, language: secondary, text: secondaryText, force: forceRework() })} /></label></section>}
     <details open><summary>Logic & sequence</summary><label>Conditions<textarea rows={3} className="code" value={conditions} onChange={(event) => setConditions(event.target.value)} /></label><label>Sequence<textarea rows={2} className="code" value={sequence} onChange={(event) => setSequence(event.target.value)} /></label><label>User script<textarea rows={2} className="code" value={script} onChange={(event) => setScript(event.target.value)} /></label><button onClick={() => void mutate("updateNode", { lineId: node.lineId, conditions, sequence, userScript: script, force: forceRework() })}>Save logic</button></details>
     <details><summary>Voice context</summary><label>Context<textarea rows={3} value={context} onChange={(event) => setContext(event.target.value)} /></label><label>Performance direction<textarea rows={3} value={voiceComment} onChange={(event) => setVoiceComment(event.target.value)} /></label><label>Tags<input value={tags} onChange={(event) => setTags(event.target.value)} /></label><button onClick={() => void mutate("updateNode", { lineId: node.lineId, contextComment: context, voiceComment, tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), force: forceRework() })}>Save context</button></details>
-    {node.kind !== "start" && <button className="danger-action" onClick={() => { const confirmation = window.prompt(`Type ${node.lineId} to delete this line.`); if (confirmation) void mutate("deleteNode", { lineId: node.lineId, confirmation, force: node.lineStatus === "final" }); }}>Delete line…</button>}
+    {node.kind !== "start" && <button className="danger-action" onClick={() => void prompt({ title: "Delete dialogue line?", label: `Type ${node.lineId} to confirm`, description: "This removes the line from the current graph. Its permanent Line ID and Unity numeric ID will never be reissued.", confirmLabel: "Delete line", danger: true, requiredValue: node.lineId }).then((confirmation) => { if (confirmation !== null) return mutate("deleteNode", { lineId: node.lineId, confirmation, force: node.lineStatus === "final" }); })}>Delete line…</button>}
     {error && <div className="error-banner">{error}</div>}
   </aside>;
 }
@@ -163,8 +206,9 @@ function GraphWorkspace({ graph, snapshot, selectedNodeId, onSelect, onMutated, 
 }
 
 function BeatMap({ snapshot, onConversation, refresh }: { snapshot: ProjectSnapshot; onConversation(id: string): void; refresh(): Promise<void> }) {
-  const addScene = async () => { const name = window.prompt("Scene name"); if (!name) return; await window.reed.mutate("createScene", { name, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), beatRef: "", sortOrder: snapshot.scenes.length, source: "human" }); await refresh(); };
-  const addConversation = async (sceneId: string) => { const title = window.prompt("Conversation title"); if (!title) return; const result = await window.reed.mutate("createConversation", { sceneId, title, description: "", source: "human" }) as { value?: { id?: string } }; await refresh(); if (result.value?.id) onConversation(result.value.id); };
+  const prompt = usePrompt();
+  const addScene = async () => { const name = await prompt({ title: "Add scene", label: "Scene name", confirmLabel: "Create scene" }); if (!name) return; await window.reed.mutate("createScene", { name, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), beatRef: "", sortOrder: snapshot.scenes.length, source: "human" }); await refresh(); };
+  const addConversation = async (sceneId: string) => { const title = await prompt({ title: "Add conversation", label: "Conversation title", confirmLabel: "Create conversation" }); if (!title) return; const result = await window.reed.mutate("createConversation", { sceneId, title, description: "", source: "human" }) as { value?: { id?: string } }; await refresh(); if (result.value?.id) onConversation(result.value.id); };
   return <div className="beat-map"><header><div><p className="eyebrow">Story structure</p><h2>Beat map</h2></div><button className="primary" onClick={() => void addScene()}>Add scene</button></header>
     <div className="beat-track">{snapshot.scenes.map((scene, index) => <article key={scene.id}><span className="beat-index">{String(index + 1).padStart(2, "0")}</span><div><h3>{scene.name}</h3><p>{scene.beatRef || "No Obsidian beat reference"}</p>{snapshot.conversations.filter((conversation) => conversation.sceneId === scene.id).map((conversation) => <button key={conversation.id} onClick={() => onConversation(conversation.id)}>{conversation.title}<em>{conversation.nodes.length - 1} lines</em></button>)}<button className="add-inline" onClick={() => void addConversation(scene.id)}>+ Conversation</button></div></article>)}</div>
   </div>;
@@ -172,13 +216,16 @@ function BeatMap({ snapshot, onConversation, refresh }: { snapshot: ProjectSnaps
 
 function Playtest({ graph, snapshot, language }: { graph: ConversationGraph | null; snapshot: ProjectSnapshot; language: string }) {
   const start = graph?.nodes.find((node) => node.kind === "start"); const [currentId, setCurrentId] = useState(start?.id ?? ""); const [pathIds, setPathIds] = useState<string[]>([]);
+  const initialConditions = useMemo(() => Object.fromEntries(snapshot.variables.map((variable) => [variable.name, variable.initialValue])), [snapshot.variables]);
+  const [conditionValues, setConditionValues] = useState<Record<string, string | number | boolean>>(initialConditions);
   useEffect(() => { setCurrentId(start?.id ?? ""); setPathIds([]); }, [graph?.id, start?.id]);
+  useEffect(() => { setConditionValues(initialConditions); }, [initialConditions]);
   if (!graph || !start) return <div className="workspace-empty">Select a conversation to playtest.</div>;
   const current = graph.nodes.find((node) => node.id === currentId) ?? start; const outgoing = graph.links.filter((link) => link.originNodeId === current.id).sort((a, b) => a.priority - b.priority);
   const choose = (id: string) => { setPathIds((value) => [...value, current.id]); setCurrentId(id); };
   const speaker = current.speakerCharacterId ? snapshot.characters.find((character) => character.id === current.speakerCharacterId)?.name : "";
-  return <div className="playtest"><aside><h3>Run conditions</h3>{snapshot.variables.map((variable) => <label key={variable.id}>{variable.name}<input type={variable.type === "boolean" ? "checkbox" : "text"} defaultChecked={variable.type === "boolean" ? Boolean(variable.initialValue) : undefined} defaultValue={variable.type !== "boolean" ? String(variable.initialValue) : undefined} /></label>)}<h3>Path</h3>{pathIds.map((id, index) => <button key={`${id}-${index}`} onClick={() => { setCurrentId(id); setPathIds((value) => value.slice(0, index)); }}>{graph.nodes.find((node) => node.id === id)?.lineId}</button>)}</aside>
-    <main><p className="eyebrow">Text-only run · {graph.title}</p><div className="play-line"><span>{speaker}</span><p>{current.kind === "start" ? "Begin conversation" : current.texts.find((value) => value.language === language)?.text || "No text"}</p></div><div className="choices">{outgoing.map((link) => { const target = graph.nodes.find((node) => node.id === link.destinationNodeId); return <button key={link.id} onClick={() => choose(link.destinationNodeId)}><span>{target?.texts.find((value) => value.language === language)?.menuText || target?.texts.find((value) => value.language === language)?.text || "Continue"}</span>{target?.conditions && <small>Gated · {target.conditions}</small>}</button>; })}{outgoing.length === 0 && <div className="end-marker">End of path</div>}</div><button className="reset" onClick={() => { setCurrentId(start.id); setPathIds([]); }}>Restart</button></main></div>;
+  return <div className="playtest"><aside><h3>Run conditions</h3>{snapshot.variables.map((variable) => <label key={variable.id}>{variable.name}<input type={variable.type === "boolean" ? "checkbox" : variable.type === "number" ? "number" : "text"} checked={variable.type === "boolean" ? Boolean(conditionValues[variable.name]) : undefined} value={variable.type !== "boolean" ? String(conditionValues[variable.name] ?? "") : undefined} onChange={(event) => setConditionValues((values) => ({ ...values, [variable.name]: variable.type === "boolean" ? event.target.checked : variable.type === "number" ? Number(event.target.value) : event.target.value }))} /></label>)}<h3>Path</h3>{pathIds.map((id, index) => <button key={`${id}-${index}`} onClick={() => { setCurrentId(id); setPathIds((value) => value.slice(0, index)); }}>{graph.nodes.find((node) => node.id === id)?.lineId}</button>)}</aside>
+    <main><p className="eyebrow">Text-only run · {graph.title}</p><div className="play-line"><span>{speaker}</span><p>{current.kind === "start" ? "Begin conversation" : current.texts.find((value) => value.language === language)?.text || "No text"}</p></div><div className="choices">{outgoing.map((link) => { const target = graph.nodes.find((node) => node.id === link.destinationNodeId); const condition = evaluatePlaytestCondition(target?.conditions ?? "", conditionValues); return <button key={link.id} disabled={!condition.allowed} onClick={() => { if (condition.allowed) choose(link.destinationNodeId); }}><span>{target?.texts.find((value) => value.language === language)?.menuText || target?.texts.find((value) => value.language === language)?.text || "Continue"}</span>{target?.conditions && <small>{condition.supported ? condition.allowed ? "Condition met" : "Gated" : "Unsupported condition"} · {target.conditions}</small>}</button>; })}{outgoing.length === 0 && <div className="end-marker">End of path</div>}</div><button className="reset" onClick={() => { setCurrentId(start.id); setPathIds([]); }}>Restart</button></main></div>;
 }
 
 function Translation({ graph, snapshot, primary, secondary, onSelect }: { graph: ConversationGraph | null; snapshot: ProjectSnapshot; primary: string; secondary: string; onSelect(id: string): void }) {
@@ -188,8 +235,9 @@ function Translation({ graph, snapshot, primary, secondary, onSelect }: { graph:
 }
 
 function Characters({ snapshot, refresh }: { snapshot: ProjectSnapshot; refresh(): Promise<void> }) {
-  const add = async () => { const name = window.prompt("Character name"); if (!name) return; await window.reed.mutate("upsertCharacter", { name, displayNames: {}, isPlayer: false, portraitPath: null, description: "", actorNotes: "", voiceNotes: "", source: "human" }); await refresh(); };
-  const addVariable = async () => { const name = window.prompt("Variable name"); if (!name) return; const requested = window.prompt("Type: boolean, number, or text", "boolean"); if (!requested || !["boolean", "number", "text"].includes(requested)) return; const initialValue = requested === "boolean" ? false : requested === "number" ? 0 : ""; await window.reed.mutate("declareVariable", { name, type: requested, initialValue, description: "", source: "human" }); await refresh(); };
+  const prompt = usePrompt();
+  const add = async () => { const name = await prompt({ title: "Add character", label: "Character name", confirmLabel: "Create character" }); if (!name) return; await window.reed.mutate("upsertCharacter", { name, displayNames: {}, isPlayer: false, portraitPath: null, description: "", actorNotes: "", voiceNotes: "", source: "human" }); await refresh(); };
+  const addVariable = async () => { const name = await prompt({ title: "Add variable", label: "Variable name", confirmLabel: "Choose type" }); if (!name) return; const requested = await prompt({ title: `Set type for ${name}`, label: "Variable type", confirmLabel: "Create variable", options: [{ value: "boolean", label: "Boolean" }, { value: "number", label: "Number" }, { value: "text", label: "Text" }] }); if (!requested) return; const initialValue = requested === "boolean" ? false : requested === "number" ? 0 : ""; await window.reed.mutate("declareVariable", { name, type: requested, initialValue, description: "", source: "human" }); await refresh(); };
   const usage = (id: string) => snapshot.conversations.reduce((total, conversation) => total + conversation.nodes.filter((node) => node.speakerCharacterId === id).length, 0);
   return <div className="characters"><header><div><p className="eyebrow">Cast registry</p><h2>Characters</h2></div><button className="primary" onClick={() => void add()}>Add character</button></header><div className="character-list">{snapshot.characters.map((character) => <article key={character.id}><div className="avatar">{character.name.slice(0, 2).toUpperCase()}</div><div><h3>{character.name}{character.isPlayer && <span>Player</span>}</h3><p>{character.description || "No character description"}</p><small>Actor ID {character.numericId} · {usage(character.id)} lines</small></div></article>)}</div><section className="variable-registry"><header><div><p className="eyebrow">Condition contract</p><h2>Declared variables</h2></div><button onClick={() => void addVariable()}>Add variable</button></header>{snapshot.variables.length ? <div>{snapshot.variables.map((variable) => <article key={variable.id}><code>{variable.name}</code><span>{variable.type}</span><strong>{JSON.stringify(variable.initialValue)}</strong><small>ID {variable.numericId}</small></article>)}</div> : <p>No variables declared.</p>}</section></div>;
 }
@@ -200,8 +248,9 @@ function Validation({ report, onJump }: { report: ValidationReport; onJump(issue
 }
 
 function Review({ refresh }: { refresh(): Promise<void> }) {
+  const prompt = usePrompt();
   const [changes, setChanges] = useState<MutationRecord[]>([]); useEffect(() => { void window.reed.getReviewDiff().then(setChanges); }, []);
-  const approve = async () => { const label = window.prompt("Name this approved snapshot"); if (!label) return; await window.reed.mutate("approveReview", { label }); setChanges([]); await refresh(); };
+  const approve = async () => { const label = await prompt({ title: "Approve review", label: "Snapshot name", description: "This records the current reviewed state locally.", confirmLabel: "Approve & snapshot" }); if (!label) return; await window.reed.mutate("approveReview", { label }); setChanges([]); await refresh(); };
   return <div className="review"><header><div><p className="eyebrow">Since last approval</p><h2>{changes.length ? `${changes.length} changes to review` : "Review inbox is clear"}</h2></div>{changes.length > 0 && <button className="primary" onClick={() => void approve()}>Approve & snapshot</button>}</header><div className="change-list">{changes.map((change) => <article key={change.sequence}><span>{change.sequence}</span><div><code>{change.operation}</code><p>{JSON.stringify(change.changes, null, 2)}</p><small>{change.source} · v{change.baseVersion} → v{change.newVersion}</small></div></article>)}</div></div>;
 }
 
@@ -215,30 +264,39 @@ function ReadView({ snapshot }: { snapshot: ProjectSnapshot }) {
   return <div className="read-view"><header><p className="eyebrow">Golden path</p><h1>{snapshot.project.name}</h1><p>Linear table-read view · {snapshot.project.defaultLanguage.toUpperCase()}</p></header>{snapshot.conversations.map((conversation) => <section key={conversation.id}><h2>{conversation.title}</h2>{conversation.nodes.filter((node) => node.kind !== "start" && node.kind !== "group").map((node) => <div className="script-line" key={node.id}><strong>{snapshot.characters.find((character) => character.id === node.speakerCharacterId)?.name ?? "Unassigned"}</strong><p>{node.texts.find((text) => text.language === snapshot.project.defaultLanguage)?.text || "—"}</p><code>{node.lineId}</code></div>)}</section>)}</div>;
 }
 
-export function App() {
+function EditorApp() {
   const [state, setState] = useState<EditorBootstrap | null>(null); const [workspace, setWorkspace] = useState<Workspace>("graph");
   const [conversationId, setConversationId] = useState<string | null>(null); const [graph, setGraph] = useState<ConversationGraph | null>(null); const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [primary, setPrimary] = useState("en"); const [secondary, setSecondary] = useState("el"); const [search, setSearch] = useState(""); const [results, setResults] = useState<SearchResult[]>([]); const [notice, setNotice] = useState("All changes saved locally");
   const [navigatorOpen, setNavigatorOpen] = useState(false); const [inspectorOpen, setInspectorOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false); const workspaceMenuRef = useRef<HTMLDivElement>(null);
+  const workspaceMenuTriggerRef = useRef<HTMLButtonElement>(null); const workspaceMenuItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   useEffect(() => { void window.reed.getBootstrap().then((value) => { if (value) { setState(value); setPrimary(value.snapshot.project.defaultLanguage); setSecondary(value.snapshot.project.languages.find((language) => language !== value.snapshot.project.defaultLanguage) ?? value.snapshot.project.defaultLanguage); setConversationId(value.snapshot.conversations[0]?.id ?? null); } }); }, []);
   const loadConversation = useCallback(async (id: string | null) => { if (!id) { setGraph(null); return; } const value = await window.reed.getConversation(id); setGraph(value); setSelectedNodeId((current) => value.nodes.some((node) => node.id === current) ? current : value.nodes.find((node) => node.kind !== "start")?.id ?? value.nodes[0]?.id ?? null); }, []);
   useEffect(() => { void loadConversation(conversationId); }, [conversationId, loadConversation]);
   const refresh = useCallback(async () => { const next = await window.reed.getBootstrap(); if (next) { setState(next); if (conversationId) await loadConversation(conversationId); } }, [conversationId, loadConversation]);
   useEffect(() => { if (!state) return; const timer = window.setInterval(async () => { const changes = await window.reed.getChanges(state.lastChangeSequence); if (changes.length) { setNotice(`${changes.length} external change${changes.length === 1 ? "" : "s"} loaded`); await refresh(); } }, 1400); return () => window.clearInterval(timer); }, [state?.lastChangeSequence, refresh]);
-  useEffect(() => { const listener = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && /^[1-9]$/.test(event.key)) { const match = workspaces.find((value) => value.key === event.key); if (match) { event.preventDefault(); setWorkspace(match.id); setNavigatorOpen(false); setInspectorOpen(false); setWorkspaceMenuOpen(false); } } }; window.addEventListener("keydown", listener); return () => window.removeEventListener("keydown", listener); }, []);
+  useEffect(() => { const listener = (event: KeyboardEvent) => {
+    if (event.key === "Escape") { setNavigatorOpen(false); setInspectorOpen(false); setWorkspaceMenuOpen(false); return; }
+    const shortcut = globalShortcut(event.key, event.metaKey || event.ctrlKey);
+    if (!shortcut) return;
+    event.preventDefault();
+    if (shortcut === "toggle-project") { setNavigatorOpen((value) => !value); setInspectorOpen(false); setWorkspaceMenuOpen(false); return; }
+    setWorkspace(shortcut); setNavigatorOpen(false); setInspectorOpen(false); setWorkspaceMenuOpen(false);
+  }; window.addEventListener("keydown", listener); return () => window.removeEventListener("keydown", listener); }, []);
   useEffect(() => {
     if (!workspaceMenuOpen) return;
     const closeOutside = (event: PointerEvent) => { if (!workspaceMenuRef.current?.contains(event.target as HTMLElement)) setWorkspaceMenuOpen(false); };
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setWorkspaceMenuOpen(false); };
-    window.addEventListener("pointerdown", closeOutside); window.addEventListener("keydown", closeOnEscape);
-    return () => { window.removeEventListener("pointerdown", closeOutside); window.removeEventListener("keydown", closeOnEscape); };
+    window.addEventListener("pointerdown", closeOutside);
+    return () => window.removeEventListener("pointerdown", closeOutside);
   }, [workspaceMenuOpen]);
   if (!state) return <Welcome onReady={(value) => { setState(value); setPrimary(value.snapshot.project.defaultLanguage); setSecondary(value.snapshot.project.languages.find((language) => language !== value.snapshot.project.defaultLanguage) ?? value.snapshot.project.defaultLanguage); setConversationId(value.snapshot.conversations[0]?.id ?? null); }} />;
   const snapshot = state.snapshot; const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const chooseWorkspace = (id: Workspace) => { setWorkspace(id); setNavigatorOpen(false); setInspectorOpen(false); setWorkspaceMenuOpen(false); };
   const chooseConversation = (id: string) => { setConversationId(id); setWorkspace("graph"); setNavigatorOpen(false); setInspectorOpen(false); };
   const selectNode = (id: string) => { setSelectedNodeId(id); setInspectorOpen(true); };
+  const focusWorkspaceMenuItem = (index: number) => window.requestAnimationFrame(() => workspaceMenuItemRefs.current[index]?.focus());
+  const openWorkspaceMenu = (index: number) => { setWorkspaceMenuOpen(true); focusWorkspaceMenuItem(index); };
   const jumpIssue = (issue: ValidationIssue) => { if (issue.conversationId) setConversationId(issue.conversationId); setWorkspace("graph"); setNavigatorOpen(false); window.setTimeout(() => { const node = graph?.nodes.find((candidate) => candidate.lineId === issue.lineId); if (node) { setSelectedNodeId(node.id); setInspectorOpen(true); } }, 100); };
   const doSearch = async () => { setResults(search.trim() ? await window.reed.findLines({ query: search }) : []); };
   return <div className="app-shell">
@@ -248,9 +306,9 @@ export function App() {
       <div className="workspace-navigation">
         <div className="workspace-tabs" aria-label="Authoring workspaces">{primaryWorkspaces.map((item) => <button key={item.id} className={workspace === item.id ? "active" : ""} aria-current={workspace === item.id ? "page" : undefined} onClick={() => chooseWorkspace(item.id)}>{item.label}<kbd>⌘{item.key}</kbd></button>)}</div>
         <div className="workspace-more" ref={workspaceMenuRef}>
-          <button className={`workspace-more-trigger ${secondaryWorkspaceGroups.some((group) => group.items.some((item) => item.id === workspace)) ? "active" : ""}`} aria-haspopup="menu" aria-expanded={workspaceMenuOpen} aria-label="More workspaces" onClick={() => setWorkspaceMenuOpen((value) => !value)}>More<span aria-hidden="true">⌄</span></button>
-          <div className={`workspace-menu ${workspaceMenuOpen ? "open" : ""}`} role="menu" aria-label="More workspaces" aria-hidden={!workspaceMenuOpen}>
-            {secondaryWorkspaceGroups.map((group) => <div className="workspace-menu-section" key={group.label} role="group" aria-label={group.label}><span className="workspace-menu-label">{group.label}</span>{group.items.map((item) => <button key={item.id} role="menuitem" tabIndex={workspaceMenuOpen ? 0 : -1} className={workspace === item.id ? "active" : ""} aria-current={workspace === item.id ? "page" : undefined} onClick={() => chooseWorkspace(item.id)}><span>{item.label}</span><kbd>⌘{item.key}</kbd></button>)}</div>)}
+          <button ref={workspaceMenuTriggerRef} className={`workspace-more-trigger ${secondaryWorkspaceGroups.some((group) => group.items.some((item) => item.id === workspace)) ? "active" : ""}`} aria-haspopup="menu" aria-controls="workspace-more-menu" aria-expanded={workspaceMenuOpen} aria-label="More workspaces" onClick={() => setWorkspaceMenuOpen((value) => !value)} onKeyDown={(event) => { if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) { event.preventDefault(); openWorkspaceMenu(event.key === "ArrowUp" ? secondaryWorkspaces.length - 1 : 0); } }}>More<span aria-hidden="true">⌄</span></button>
+          <div id="workspace-more-menu" className={`workspace-menu ${workspaceMenuOpen ? "open" : ""}`} role="menu" aria-label="More workspaces" aria-hidden={!workspaceMenuOpen}>
+            {secondaryWorkspaceGroups.map((group) => <div className="workspace-menu-section" key={group.label} role="group" aria-label={group.label}><span className="workspace-menu-label">{group.label}</span>{group.items.map((item) => { const itemIndex = secondaryWorkspaceIndex.get(item.id) ?? 0; return <button ref={(element) => { workspaceMenuItemRefs.current[itemIndex] = element; }} key={item.id} role="menuitem" tabIndex={workspaceMenuOpen ? 0 : -1} className={workspace === item.id ? "active" : ""} aria-current={workspace === item.id ? "page" : undefined} onClick={() => chooseWorkspace(item.id)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setWorkspaceMenuOpen(false); workspaceMenuTriggerRef.current?.focus(); return; } const next = nextMenuIndex(itemIndex, secondaryWorkspaces.length, event.key); if (next !== null) { event.preventDefault(); focusWorkspaceMenuItem(next); } }}><span>{item.label}</span><kbd>⌘{item.key}</kbd></button>; })}</div>)}
           </div>
         </div>
       </div>
@@ -260,6 +318,8 @@ export function App() {
     <main className="workspace">{workspace === "graph" && <GraphWorkspace graph={graph} snapshot={snapshot} selectedNodeId={selectedNodeId} onSelect={selectNode} onMutated={refresh} primary={primary} secondary={secondary} />}{workspace === "beats" && <BeatMap snapshot={snapshot} onConversation={chooseConversation} refresh={refresh} />}{workspace === "playtest" && <Playtest graph={graph} snapshot={snapshot} language={primary} />}{workspace === "translation" && <Translation graph={graph} snapshot={snapshot} primary={primary} secondary={secondary} onSelect={selectNode} />}{workspace === "characters" && <Characters snapshot={snapshot} refresh={refresh} />}{workspace === "validation" && <Validation report={state.validation} onJump={jumpIssue} />}{workspace === "review" && <Review refresh={refresh} />}{workspace === "production" && <Production snapshot={snapshot} />}{workspace === "read" && <ReadView snapshot={snapshot} />}</main>
     {(workspace === "graph" || workspace === "translation") && graph && <Inspector graph={graph} node={selectedNode} primary={primary} secondary={secondary} languages={snapshot.project.languages} characters={snapshot.characters} open={inspectorOpen} onMutated={refresh} onClose={() => setInspectorOpen(false)} />}
     {(navigatorOpen || inspectorOpen) && <button className="panel-scrim" aria-label="Close open panel" onClick={() => { setNavigatorOpen(false); setInspectorOpen(false); }} />}
-    <footer className="status-bar"><span><i className={state.validation.valid ? "ok" : "bad"} />{state.validation.valid ? "Validation clear" : `${state.validation.errors} errors`}</span><span>{notice}</span><span>{state.root}</span><div className="language-switch"><select value={primary} onChange={(event) => setPrimary(event.target.value)}>{snapshot.project.languages.map((language) => <option key={language}>{language}</option>)}</select><button onClick={() => { setPrimary(secondary); setSecondary(primary); }}>⇄</button><select value={secondary} onChange={(event) => setSecondary(event.target.value)}>{snapshot.project.languages.map((language) => <option key={language}>{language}</option>)}</select></div></footer>
+    <footer className="status-bar"><span><i className={state.validation.valid ? "ok" : "bad"} />{state.validation.valid ? "Validation clear" : `${state.validation.errors} errors`}</span><span>{notice}</span><span>{state.root}</span><div className="language-switch"><select value={primary} onChange={(event) => setPrimary(event.target.value)}>{snapshot.project.languages.map((language) => <option key={language}>{language}</option>)}</select><button aria-label="Swap primary and reference languages" onClick={() => { setPrimary(secondary); setSecondary(primary); }}>⇄</button><select value={secondary} onChange={(event) => setSecondary(event.target.value)}>{snapshot.project.languages.map((language) => <option key={language}>{language}</option>)}</select></div></footer>
   </div>;
 }
+
+export function App() { return <PromptProvider><EditorApp /></PromptProvider>; }
