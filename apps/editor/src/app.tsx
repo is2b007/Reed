@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background, BackgroundVariant, Controls, Handle, MiniMap, Position, ReactFlow,
-  type Connection, type Edge, type Node, type NodeProps,
+  useNodesState, type Connection, type Edge, type Node, type NodeProps,
 } from "@xyflow/react";
 import type {
   CharacterRecord, ConversationGraph, DialogueNodeRecord, MutationRecord, ProjectSnapshot,
@@ -179,9 +179,11 @@ function GraphWorkspace({ graph, snapshot, selectedNodeId, onSelect, onMutated, 
     while (queue.length) { const origin = queue.shift(); if (!origin) break; for (const edge of graph.links.filter((link) => link.originNodeId === origin)) if (!seen.has(edge.destinationNodeId)) { seen.add(edge.destinationNodeId); parent.set(edge.destinationNodeId, origin); queue.push(edge.destinationNodeId); } }
     let current: string | undefined = selectedNodeId; while (current) { ids.add(current); current = parent.get(current); } return ids;
   }, [graph, selectedNodeId]);
-  const nodes = useMemo<CardNode[]>(() => graph?.nodes.map((node) => ({ id: node.id, type: "dialogue", position: { x: node.x, y: node.y }, selected: node.id === selectedNodeId,
+  const graphNodes = useMemo<CardNode[]>(() => graph?.nodes.map((node) => ({ id: node.id, type: "dialogue", position: { x: node.x, y: node.y }, selected: node.id === selectedNodeId,
     data: { record: node, speaker: node.speakerCharacterId ? characters.get(node.speakerCharacterId) ?? "Unknown" : "Unassigned", primary: node.texts.find((value) => value.language === primary)?.text ?? "", secondary: node.texts.find((value) => value.language === secondary)?.text ?? "", onPath: pathIds.has(node.id) },
   })) ?? [], [graph, selectedNodeId, characters, primary, secondary, pathIds]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<CardNode>(graphNodes);
+  useEffect(() => setNodes(graphNodes), [graphNodes, setNodes]);
   const edges = useMemo<Edge[]>(() => graph?.links.map((link) => ({ id: link.id, source: link.originNodeId, target: link.destinationNodeId,
     label: graph.nodes.find((node) => node.id === link.destinationNodeId)?.conditions.slice(0, 42),
     style: pathIds.has(link.originNodeId) && pathIds.has(link.destinationNodeId) ? { stroke: "#b6cb78", strokeWidth: 3 } : { stroke: "#526057", strokeWidth: 1.5 },
@@ -201,7 +203,7 @@ function GraphWorkspace({ graph, snapshot, selectedNodeId, onSelect, onMutated, 
     await window.reed.mutate("unlinkNodes", { linkId: link.id, expectedVersion: graph.version, source: "human", force: touchesFinal }); await onMutated();
   };
   if (!graph) return <div className="workspace-empty"><h2>Select a conversation</h2><p>The graph, playtest, and translation workspaces follow the same selection.</p></div>;
-  return <div className="graph-workspace"><div className="graph-tools"><span>Add</span><button onClick={() => void add("line")}>Line</button><button onClick={() => void add("choice")}>Choice</button><button onClick={() => void add("group")}>Junction</button><small>Select a link and press Delete to unlink</small></div><ReactFlow<CardNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView minZoom={0.2} maxZoom={1.8} onNodeClick={(_event, node) => onSelect(node.id)} onConnect={(value) => void connect(value)} onEdgesDelete={(value) => void removeEdge(value)} onNodeDragStop={(_event, moved) => { const record = graph.nodes.find((node) => node.id === moved.id); if (record) void window.reed.mutate("updateNode", { lineId: record.lineId, x: moved.position.x, y: moved.position.y, expectedVersion: graph.version, source: "human", force: false }).then(onMutated); }}>
+  return <div className="graph-workspace"><div className="graph-tools"><span>Add</span><button onClick={() => void add("line")}>Line</button><button onClick={() => void add("choice")}>Choice</button><button onClick={() => void add("group")}>Junction</button><small>Select a link and press Delete to unlink</small></div><ReactFlow<CardNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView minZoom={0.2} maxZoom={1.8} onNodesChange={onNodesChange} onNodeClick={(_event, node) => onSelect(node.id)} onConnect={(value) => void connect(value)} onEdgesDelete={(value) => void removeEdge(value)} onNodeDragStop={(_event, moved) => { const record = graph.nodes.find((node) => node.id === moved.id); if (record) void window.reed.mutate("updateNode", { lineId: record.lineId, x: moved.position.x, y: moved.position.y, expectedVersion: graph.version, source: "human", force: false }).then(onMutated); }}>
     <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#334038" /><Controls position="bottom-right" /><MiniMap pannable zoomable nodeColor={(node) => pathIds.has(node.id) ? "#b6cb78" : "#344139"} /></ReactFlow></div>;
 }
 
