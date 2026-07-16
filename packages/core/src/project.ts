@@ -19,7 +19,9 @@ import {
   SetVoiceStatusInputSchema,
   SetNodeTextInputSchema,
   UnlinkNodesInputSchema,
+  UpdateConversationInputSchema,
   UpdateNodeInputSchema,
+  UpdateSceneInputSchema,
   UpsertCharacterInputSchema,
   type AddNodeInput,
   type CreateConversationInput,
@@ -38,7 +40,9 @@ import {
   type SetNodeTextInput,
   type UpsertCharacterInput,
   type UnlinkNodesInput,
+  type UpdateConversationInput,
   type UpdateNodeInput,
+  type UpdateSceneInput,
 } from "@reed/schema";
 import { ConflictError, ConcurrencyError, GuardrailError, NotFoundError } from "./errors.js";
 import { runMigrations } from "./migrations.js";
@@ -417,6 +421,31 @@ export class ReedProject {
     return { value: mapScene(this.db.prepare("SELECT * FROM scenes WHERE id = ?").get(id) as Row), ...result };
   }
 
+  async updateScene(rawInput: UpdateSceneInput): Promise<MutationResult<SceneRecord>> {
+    const input = UpdateSceneInputSchema.parse(rawInput);
+    await this.ensureRollingBackup();
+    const project = this.getProject();
+    this.assertVersion("project", project.id, input.expectedVersion, project.version);
+    const existing = this.db.prepare("SELECT * FROM scenes WHERE id = ? AND project_id = ?").get(input.id, project.id) as Row | undefined;
+    if (!existing) throw new NotFoundError("Scene", input.id);
+    const updates: Array<[string, unknown]> = [];
+    if (input.name !== undefined) updates.push(["name", input.name]);
+    if (input.beatRef !== undefined) updates.push(["beat_ref", input.beatRef]);
+    if (input.sortOrder !== undefined) updates.push(["sort_order", input.sortOrder]);
+    if (updates.length === 0) throw new ConflictError("Update scene requires at least one editable field", { id: input.id });
+    const timestamp = now();
+    const result = this.db.transaction(() => {
+      this.db.prepare(`UPDATE scenes SET ${updates.map(([column]) => `${column} = ?`).join(", ")}, updated_at = ? WHERE id = ?`)
+        .run(...updates.map(([, value]) => value), timestamp, input.id);
+      return this.commitProjectMutation(project, "scene.update", input.source, {
+        id: input.id,
+        before: { name: existing.name, beatRef: existing.beat_ref, sortOrder: existing.sort_order },
+        after: { name: input.name ?? existing.name, beatRef: input.beatRef ?? existing.beat_ref, sortOrder: input.sortOrder ?? existing.sort_order },
+      }, input.expectedVersion);
+    }).immediate();
+    return { value: mapScene(this.db.prepare("SELECT * FROM scenes WHERE id = ?").get(input.id) as Row), ...result };
+  }
+
   async createConversation(rawInput: CreateConversationInput): Promise<MutationResult<ConversationGraph>> {
     const input = CreateConversationInputSchema.parse(rawInput);
     await this.ensureRollingBackup();
@@ -444,6 +473,28 @@ export class ReedProject {
       return this.commitProjectMutation(project, "conversation.create", input.source, { id, sceneId: input.sceneId, numericId, startNodeId: startId }, input.expectedVersion);
     }).immediate();
     return { value: this.getConversation(id), ...result };
+  }
+
+  async updateConversation(rawInput: UpdateConversationInput): Promise<MutationResult<ConversationGraph>> {
+    const input = UpdateConversationInputSchema.parse(rawInput);
+    await this.ensureRollingBackup();
+    const conversation = this.requireConversation(input.id);
+    this.assertVersion("conversation", conversation.id, input.expectedVersion, conversation.version);
+    const updates: Array<[string, unknown]> = [];
+    if (input.title !== undefined) updates.push(["title", input.title]);
+    if (input.description !== undefined) updates.push(["description", input.description]);
+    if (updates.length === 0) throw new ConflictError("Update conversation requires at least one editable field", { id: input.id });
+    const timestamp = now();
+    const result = this.db.transaction(() => {
+      this.db.prepare(`UPDATE conversations SET ${updates.map(([column]) => `${column} = ?`).join(", ")}, updated_at = ? WHERE id = ?`)
+        .run(...updates.map(([, value]) => value), timestamp, input.id);
+      return this.commitConversationMutation(conversation, "conversation.update", input.source, {
+        id: input.id,
+        before: { title: conversation.title, description: conversation.description },
+        after: { title: input.title ?? conversation.title, description: input.description ?? conversation.description },
+      }, input.expectedVersion);
+    }).immediate();
+    return { value: this.getConversation(input.id), ...result };
   }
 
   async addNode(rawInput: AddNodeInput): Promise<MutationResult<DialogueNodeRecord>> {

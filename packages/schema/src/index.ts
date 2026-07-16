@@ -72,10 +72,27 @@ export const CreateSceneInputSchema = z.object({
   source: MutationSourceSchema.default("human"),
 });
 
+export const UpdateSceneInputSchema = z.object({
+  id: IdSchema,
+  name: z.string().trim().min(1).max(120).optional(),
+  beatRef: z.string().trim().max(300).optional(),
+  sortOrder: z.number().int().nonnegative().optional(),
+  expectedVersion: z.number().int().positive().optional(),
+  source: MutationSourceSchema.default("human"),
+});
+
 export const CreateConversationInputSchema = z.object({
   sceneId: IdSchema,
   title: z.string().trim().min(1).max(200),
   description: z.string().max(4_000).default(""),
+  expectedVersion: z.number().int().positive().optional(),
+  source: MutationSourceSchema.default("human"),
+});
+
+export const UpdateConversationInputSchema = z.object({
+  id: IdSchema,
+  title: z.string().trim().min(1).max(200).optional(),
+  description: z.string().max(4_000).optional(),
   expectedVersion: z.number().int().positive().optional(),
   source: MutationSourceSchema.default("human"),
 });
@@ -232,7 +249,9 @@ export const ImportConversationInputSchema = z.object({
 export type CreateProjectInput = z.infer<typeof CreateProjectInputSchema>;
 export type CreateLevelInput = z.infer<typeof CreateLevelInputSchema>;
 export type CreateSceneInput = z.infer<typeof CreateSceneInputSchema>;
+export type UpdateSceneInput = z.infer<typeof UpdateSceneInputSchema>;
 export type CreateConversationInput = z.infer<typeof CreateConversationInputSchema>;
+export type UpdateConversationInput = z.infer<typeof UpdateConversationInputSchema>;
 export type AddNodeInput = z.infer<typeof AddNodeInputSchema>;
 export type LinkNodesInput = z.infer<typeof LinkNodesInputSchema>;
 export type SetNodeTextInput = z.infer<typeof SetNodeTextInputSchema>;

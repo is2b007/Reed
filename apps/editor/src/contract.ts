@@ -14,7 +14,7 @@ export interface EditorBootstrap {
 }
 
 export type MutationName =
-  | "createLevel" | "createScene" | "createConversation" | "createPartition"
+  | "createLevel" | "createScene" | "updateScene" | "createConversation" | "updateConversation" | "createPartition"
   | "addNode" | "linkNodes" | "unlinkNodes" | "updateNode" | "deleteNode"
   | "setNodeText" | "setLineStatus" | "setVoiceStatus"
   | "upsertCharacter" | "declareVariable" | "approveReview" | "createBackup";

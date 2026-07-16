@@ -5,7 +5,7 @@ import {
 } from "@xyflow/react";
 import type {
   CharacterRecord, ConversationGraph, DialogueNodeRecord, MutationRecord, ProjectSnapshot,
-  SearchResult, ValidationIssue, ValidationReport, VariableRecord,
+  SceneRecord, SearchResult, ValidationIssue, ValidationReport, VariableRecord,
 } from "@reed/core";
 import type { EditorBootstrap, MutationName } from "./contract.js";
 import { evaluatePlaytestCondition, globalShortcut, nextMenuIndex, promptValueIsValid } from "./ui-logic.js";
@@ -220,12 +220,56 @@ function GraphWorkspace({ graph, snapshot, selectedNodeId, onSelect, onMutated, 
     <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#334038" /><Controls position="bottom-right" /><MiniMap pannable zoomable nodeColor={(node) => pathIds.has(node.id) ? "#b6cb78" : "#344139"} /></ReactFlow></div>;
 }
 
+function ConversationEditor({ conversation, open, onOpen, onClose, onConversation, onSaved }: { conversation: ConversationGraph; open: boolean; onOpen(): void; onClose(): void; onConversation(): void; onSaved(): Promise<void> }) {
+  const [title, setTitle] = useState(conversation.title);
+  const [description, setDescription] = useState(conversation.description);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const reset = () => { setTitle(conversation.title); setDescription(conversation.description); setError(""); };
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      setSaving(true); setError("");
+      await window.reed.mutate("updateConversation", { id: conversation.id, title, description, expectedVersion: conversation.version, source: "human" });
+      await onSaved(); onClose();
+    } catch (value) { setError(message(value)); } finally { setSaving(false); }
+  };
+  return <div className={`conversation-row ${open ? "editing" : ""}`}><button className="conversation-open" onClick={onConversation}><span><strong>{conversation.title}</strong>{conversation.description && <small>{conversation.description}</small>}</span><em>{conversation.nodes.length - 1} lines</em></button><button className="conversation-edit" onClick={open ? () => { reset(); onClose(); } : onOpen}>{open ? "Cancel" : "Edit"}</button>
+    {open && <form className="metadata-form conversation-form" onSubmit={(event) => void save(event)}><label>Conversation title<input autoFocus required maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>Conversation description<textarea rows={3} maxLength={4000} value={description} onChange={(event) => setDescription(event.target.value)} /></label>{error && <div className="error-banner" role="alert">{error}</div>}<div className="metadata-actions"><button type="button" onClick={() => { reset(); onClose(); }}>Cancel</button><button className="primary" type="submit" disabled={saving || !title.trim()}>{saving ? "Saving…" : "Save conversation"}</button></div></form>}
+  </div>;
+}
+
+function SceneEditor({ scene, conversations, projectVersion, editingConversationId, onEditConversation, onConversation, refresh }: { scene: SceneRecord; conversations: ConversationGraph[]; projectVersion: number; editingConversationId: string | null; onEditConversation(id: string | null): void; onConversation(id: string): void; refresh(): Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(scene.name);
+  const [beatRef, setBeatRef] = useState(scene.beatRef);
+  const [sortOrder, setSortOrder] = useState(scene.sortOrder);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const reset = () => { setName(scene.name); setBeatRef(scene.beatRef); setSortOrder(scene.sortOrder); setError(""); };
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      setSaving(true); setError("");
+      await window.reed.mutate("updateScene", { id: scene.id, name, beatRef, sortOrder, expectedVersion: projectVersion, source: "human" });
+      await refresh(); setEditing(false);
+    } catch (value) { setError(message(value)); } finally { setSaving(false); }
+  };
+  return <div className="scene-editor"><div className="scene-heading"><div><h3>{scene.name}</h3><p>{scene.beatRef || "No beat reference"}</p></div><button onClick={editing ? () => { reset(); setEditing(false); } : () => setEditing(true)}>{editing ? "Cancel" : "Edit scene"}</button></div>
+    {editing && <form className="metadata-form scene-form" onSubmit={(event) => void save(event)}><div className="metadata-grid"><label>Scene name<input autoFocus required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label><label>Display order<input type="number" min={0} step={1} value={sortOrder} onChange={(event) => setSortOrder(Number(event.target.value))} /></label></div><label>Local beat reference<input maxLength={300} placeholder="Obsidian note, path, or beat ID" value={beatRef} onChange={(event) => setBeatRef(event.target.value)} /></label><small>The scene slug and Line ID prefix stay permanent.</small>{error && <div className="error-banner" role="alert">{error}</div>}<div className="metadata-actions"><button type="button" onClick={() => { reset(); setEditing(false); }}>Cancel</button><button className="primary" type="submit" disabled={saving || !name.trim()}>{saving ? "Saving…" : "Save scene"}</button></div></form>}
+    <div className="scene-conversations">{conversations.map((conversation) => <ConversationEditor key={`${conversation.id}-${conversation.updatedAt}`} conversation={conversation} open={editingConversationId === conversation.id} onOpen={() => onEditConversation(conversation.id)} onClose={() => onEditConversation(null)} onConversation={() => onConversation(conversation.id)} onSaved={refresh} />)}</div>
+  </div>;
+}
+
 function BeatMap({ snapshot, onConversation, refresh }: { snapshot: ProjectSnapshot; onConversation(id: string): void; refresh(): Promise<void> }) {
   const prompt = usePrompt();
-  const addScene = async () => { const name = await prompt({ title: "Add scene", label: "Scene name", confirmLabel: "Create scene" }); if (!name) return; await window.reed.mutate("createScene", { name, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), beatRef: "", sortOrder: snapshot.scenes.length, source: "human" }); await refresh(); };
-  const addConversation = async (sceneId: string) => { const title = await prompt({ title: "Add conversation", label: "Conversation title", confirmLabel: "Create conversation" }); if (!title) return; const result = await window.reed.mutate("createConversation", { sceneId, title, description: "", source: "human" }) as { value?: { id?: string } }; await refresh(); if (result.value?.id) onConversation(result.value.id); };
+  const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const addScene = async () => { const name = await prompt({ title: "Add scene", label: "Scene name", confirmLabel: "Create scene" }); if (!name) return; const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `scene-${snapshot.scenes.length + 1}`; try { setError(""); await window.reed.mutate("createScene", { name, slug, beatRef: "", sortOrder: snapshot.scenes.length, expectedVersion: snapshot.project.version, source: "human" }); await refresh(); } catch (value) { setError(message(value)); } };
+  const addConversation = async (sceneId: string) => { const title = await prompt({ title: "Add conversation", label: "Conversation title", confirmLabel: "Create conversation" }); if (!title) return; try { setError(""); const result = await window.reed.mutate("createConversation", { sceneId, title, description: "", expectedVersion: snapshot.project.version, source: "human" }) as { value?: { id?: string } }; await refresh(); if (result.value?.id) setEditingConversationId(result.value.id); } catch (value) { setError(message(value)); } };
   return <div className="beat-map"><header><div><p className="eyebrow">Story structure</p><h2>Beat map</h2></div><button className="primary" onClick={() => void addScene()}>Add scene</button></header>
-    <div className="beat-track">{snapshot.scenes.map((scene, index) => <article key={scene.id}><span className="beat-index">{String(index + 1).padStart(2, "0")}</span><div><h3>{scene.name}</h3><p>{scene.beatRef || "No Obsidian beat reference"}</p>{snapshot.conversations.filter((conversation) => conversation.sceneId === scene.id).map((conversation) => <button key={conversation.id} onClick={() => onConversation(conversation.id)}>{conversation.title}<em>{conversation.nodes.length - 1} lines</em></button>)}<button className="add-inline" onClick={() => void addConversation(scene.id)}>+ Conversation</button></div></article>)}</div>
+    {error && <div className="error-banner" role="alert">{error}</div>}
+    <div className="beat-track">{snapshot.scenes.map((scene, index) => <article key={`${scene.id}-${scene.updatedAt}`}><span className="beat-index">{String(index + 1).padStart(2, "0")}</span><div><SceneEditor scene={scene} conversations={snapshot.conversations.filter((conversation) => conversation.sceneId === scene.id)} projectVersion={snapshot.project.version} editingConversationId={editingConversationId} onEditConversation={setEditingConversationId} onConversation={onConversation} refresh={refresh} /><button className="add-inline" onClick={() => void addConversation(scene.id)}>+ Conversation</button></div></article>)}</div>
   </div>;
 }
 

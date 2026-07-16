@@ -96,6 +96,17 @@ program.command("add-scene")
     print(await useProject(command, (project) => project.createScene({ name, ...options, source: globals(command).source })), command);
   });
 
+program.command("update-scene")
+  .description("update scene metadata without changing its permanent Line ID prefix")
+  .argument("<scene-id>")
+  .option("--name <name>")
+  .option("--beat-ref <reference>", "local beat-sheet reference")
+  .option("--sort-order <number>", "display order", integer)
+  .option("--expected-version <number>", "project version", integer)
+  .action(async (id: string, options: { name?: string; beatRef?: string; sortOrder?: number; expectedVersion?: number }, command: Command) => {
+    print(await useProject(command, (project) => project.updateScene({ id, ...options, source: globals(command).source })), command);
+  });
+
 program.command("add-partition")
   .description("reserve a stable Pixel Crushers Base ID range")
   .argument("<name>")
@@ -120,6 +131,16 @@ program.command("add-conversation")
   .option("--expected-version <number>", "project version", integer)
   .action(async (title: string, options: { sceneId: string; description: string; expectedVersion?: number }, command: Command) => {
     print(await useProject(command, (project) => project.createConversation({ title, ...options, source: globals(command).source })), command);
+  });
+
+program.command("update-conversation")
+  .description("update a conversation title or description")
+  .argument("<conversation-id>")
+  .option("--title <title>")
+  .option("--description <text>")
+  .option("--expected-version <number>", "conversation version", integer)
+  .action(async (id: string, options: { title?: string; description?: string; expectedVersion?: number }, command: Command) => {
+    print(await useProject(command, (project) => project.updateConversation({ id, ...options, source: globals(command).source })), command);
   });
 
 program.command("add-node")

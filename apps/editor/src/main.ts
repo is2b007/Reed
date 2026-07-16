@@ -76,7 +76,8 @@ function registerIpc(): void {
     const project = requireProject();
     const operations: Record<MutationName, (value: never) => unknown> = {
       createLevel: (value) => project.createLevel(value), createScene: (value) => project.createScene(value),
-      createConversation: (value) => project.createConversation(value), createPartition: (value) => project.createPartition(value),
+      updateScene: (value) => project.updateScene(value), createConversation: (value) => project.createConversation(value),
+      updateConversation: (value) => project.updateConversation(value), createPartition: (value) => project.createPartition(value),
       addNode: (value) => project.addNode(value), linkNodes: (value) => project.linkNodes(value),
       unlinkNodes: (value) => project.unlinkNodes(value), updateNode: (value) => project.updateNode(value),
       deleteNode: (value) => project.deleteNode(value), setNodeText: (value) => project.setNodeText(value),

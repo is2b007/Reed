@@ -15,7 +15,9 @@ import {
   SetLineStatusInputSchema,
   SetNodeTextInputSchema,
   UnlinkNodesInputSchema,
+  UpdateConversationInputSchema,
   UpdateNodeInputSchema,
+  UpdateSceneInputSchema,
   UpsertCharacterInputSchema,
 } from "@reed/schema";
 import {
@@ -66,7 +68,9 @@ register("get_schema", "Return Reed's schema version and allowed production voca
 register("list_characters", "List the cast registry.", z.object({}), () => project.listCharacters());
 
 register("create_scene", "Create a scene. Agent-created data is recorded as agent-sourced.", CreateSceneInputSchema, (args) => project.createScene({ ...args, source: "agent" }));
+register("update_scene", "Update a scene name, local beat reference, or display order without changing its permanent Line ID prefix.", UpdateSceneInputSchema, (args) => project.updateScene({ ...args, source: "agent" }));
 register("create_conversation", "Create a conversation with a permanent numeric ID and START node.", CreateConversationInputSchema, (args) => project.createConversation({ ...args, source: "agent" }));
+register("update_conversation", "Update a conversation title or description through its versioned local record.", UpdateConversationInputSchema, (args) => project.updateConversation({ ...args, source: "agent" }));
 register("add_dialogue_node", "Add a Draft line, choice, or group node.", AddNodeInputSchema, (args) => project.addNode({ ...args, source: "agent" }));
 register("link_nodes", "Create a graph edge, including cross-conversation edges.", LinkNodesInputSchema, (args) => project.linkNodes({ ...args, source: "agent" }));
 register("unlink_nodes", "Remove a graph edge. Final content remains human-protected.", UnlinkNodesInputSchema, (args) => project.unlinkNodes({ ...args, source: "agent" }));
