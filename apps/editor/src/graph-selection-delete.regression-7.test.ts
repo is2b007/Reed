@@ -17,6 +17,18 @@ describe("graph multi-selection and deletion", () => {
     expect(workspace).toMatch(/confirmation: record\.lineId/);
   });
 
+  it("pans with a two-finger trackpad gesture or Space-drag without losing pinch zoom", async () => {
+    const source = await readFile(new URL("./app.tsx", import.meta.url), "utf8");
+    const workspace = source.slice(source.indexOf("function GraphWorkspace"), source.indexOf("function ConversationEditor"));
+
+    expect(workspace).toContain("panOnScroll");
+    expect(workspace).toContain("panOnScrollSpeed={1}");
+    expect(workspace).toContain("zoomOnScroll={false}");
+    expect(workspace).toContain("zoomOnPinch");
+    expect(workspace).toContain('panActivationKeyCode="Space"');
+    expect(workspace).toContain("Two-finger pan");
+  });
+
   it("does not require typing a Line ID from the inspector", async () => {
     const source = await readFile(new URL("./app.tsx", import.meta.url), "utf8");
     const inspector = source.slice(source.indexOf("function InspectorForm"), source.indexOf("function GraphWorkspace"));
