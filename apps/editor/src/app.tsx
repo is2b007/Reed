@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background, BackgroundVariant, Controls, Handle, MiniMap, Position, ReactFlow,
-  useNodesState, type Connection, type Edge, type Node, type NodeProps,
+  SelectionMode, useNodesState, type Connection, type Edge, type Node, type NodeProps,
 } from "@xyflow/react";
 import type {
   CharacterRecord, ConversationGraph, DialogueNodeRecord, MutationRecord, ProjectSnapshot,
@@ -155,7 +155,6 @@ function LanguageTextEditor({ language, role, secondary, node, value, onSave }: 
 }
 
 function InspectorForm({ graph, node, primary, secondary, languages, characters, open, onMutated, onClose }: { graph: ConversationGraph; node: DialogueNodeRecord; primary: string; secondary: string; languages: string[]; characters: CharacterRecord[]; open: boolean; onMutated(): Promise<void>; onClose(): void }) {
-  const prompt = usePrompt();
   const [conditions, setConditions] = useState(node.conditions); const [sequence, setSequence] = useState(node.sequence);
   const [script, setScript] = useState(node.userScript); const [context, setContext] = useState(node.contextComment);
   const [terminal, setTerminal] = useState(node.isTerminal); const [contextPath, setContextPath] = useState(node.contextPath.join(", "));
@@ -167,6 +166,11 @@ function InspectorForm({ graph, node, primary, secondary, languages, characters,
   };
   const forceRework = () => node.lineStatus === "final" ? window.confirm("This line is Final. Reopen it for rework?") : false;
   const saveText = (language: string, value: { text: string; menuText: string | null; verificationStatus: "unverified" | "native-verified" }) => mutate("setNodeText", { lineId: node.lineId, language, text: value.text, menuText: value.menuText, verificationStatus: value.verificationStatus, force: forceRework() });
+  const deleteLine = () => {
+    const finalWarning = node.lineStatus === "final" ? " This line is Final." : "";
+    if (!window.confirm(`Delete line ${node.lineId}? This removes the node and its links.${finalWarning} A local backup is created automatically, and permanent IDs are never reused.`)) return;
+    void mutate("deleteNode", { lineId: node.lineId, confirmation: node.lineId, force: node.lineStatus === "final" });
+  };
   return <aside className={`inspector ${open ? "panel-open" : ""}`}>
     <div className="panel-title"><span>Line inspector</span><span className={`dot status-${node.lineStatus}`} /><button className="panel-close" aria-label="Close inspector" onClick={onClose}>×</button></div>
     <section><div className="inspector-id">{node.lineId}<button onClick={() => navigator.clipboard.writeText(node.lineId)}>Copy</button></div>
@@ -181,12 +185,13 @@ function InspectorForm({ graph, node, primary, secondary, languages, characters,
       {secondary !== primary && <LanguageTextEditor language={secondary} role="reference" secondary node={node} value={node.texts.find((value) => value.language === secondary)} onSave={(value) => saveText(secondary, value)} />}</section>}
     <details open><summary>Logic & sequence</summary><label>Conditions<textarea rows={3} className="code" value={conditions} onChange={(event) => setConditions(event.target.value)} /></label><label>Sequence<textarea rows={2} className="code" value={sequence} onChange={(event) => setSequence(event.target.value)} /></label><label>User script<textarea rows={2} className="code" value={script} onChange={(event) => setScript(event.target.value)} /></label><label className="inspector-checkbox"><input type="checkbox" checked={terminal} onChange={(event) => setTerminal(event.target.checked)} /><span>Deliberate endpoint</span></label><button onClick={() => void mutate("updateNode", { lineId: node.lineId, conditions, sequence, userScript: script, isTerminal: terminal, force: forceRework() })}>Save logic</button></details>
     <details><summary>Voice context</summary><label>Context<textarea rows={3} value={context} onChange={(event) => setContext(event.target.value)} /></label><label>Performance direction<textarea rows={3} value={voiceComment} onChange={(event) => setVoiceComment(event.target.value)} /></label><label>Authored context path<input className="code" value={contextPath} placeholder="line-id, next-line-id" onChange={(event) => setContextPath(event.target.value)} /></label><label>Tags<input value={tags} onChange={(event) => setTags(event.target.value)} /></label><button onClick={() => void mutate("updateNode", { lineId: node.lineId, contextComment: context, voiceComment, contextPath: contextPath.split(/[\s,]+/u).map((lineId) => lineId.trim()).filter(Boolean), tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), force: forceRework() })}>Save context</button></details>
-    {node.kind !== "start" && <button className="danger-action" onClick={() => void prompt({ title: "Delete dialogue line?", label: `Type ${node.lineId} to confirm`, description: "This removes the line from the current graph. Its permanent Line ID and Unity numeric ID will never be reissued.", confirmLabel: "Delete line", danger: true, requiredValue: node.lineId }).then((confirmation) => { if (confirmation !== null) return mutate("deleteNode", { lineId: node.lineId, confirmation, force: node.lineStatus === "final" }); })}>Delete line…</button>}
+    {node.kind !== "start" && <button className="danger-action" onClick={deleteLine}>Delete line…</button>}
     {error && <div className="error-banner">{error}</div>}
   </aside>;
 }
 
 function GraphWorkspace({ graph, snapshot, selectedNodeId, onSelect, onMutated, primary, secondary }: { graph: ConversationGraph | null; snapshot: ProjectSnapshot; selectedNodeId: string | null; onSelect(id: string): void; onMutated(): Promise<void>; primary: string; secondary: string }) {
+  const [graphError, setGraphError] = useState("");
   const characters = useMemo(() => new Map(snapshot.characters.map((character) => [character.id, character.name])), [snapshot.characters]);
   const pathIds = useMemo(() => {
     const ids = new Set<string>(); if (!graph || !selectedNodeId) return ids;
@@ -200,6 +205,7 @@ function GraphWorkspace({ graph, snapshot, selectedNodeId, onSelect, onMutated, 
   })) ?? [], [graph, selectedNodeId, characters, primary, secondary, pathIds]);
   const [nodes, setNodes, onNodesChange] = useNodesState<CardNode>(graphNodes);
   useEffect(() => setNodes(graphNodes), [graphNodes, setNodes]);
+  const selectedCount = nodes.filter((node) => node.selected).length;
   const edges = useMemo<Edge[]>(() => graph?.links.map((link) => ({ id: link.id, source: link.originNodeId, target: link.destinationNodeId,
     label: graph.nodes.find((node) => node.id === link.destinationNodeId)?.conditions.slice(0, 42),
     style: pathIds.has(link.originNodeId) && pathIds.has(link.destinationNodeId) ? { stroke: "#b6cb78", strokeWidth: 3 } : { stroke: "#526057", strokeWidth: 1.5 },
@@ -211,15 +217,72 @@ function GraphWorkspace({ graph, snapshot, selectedNodeId, onSelect, onMutated, 
     await onMutated();
     if (result.value?.id) onSelect(result.value.id);
   };
-  const removeEdge = async (deleted: Edge[]) => {
-    if (!graph || deleted.length === 0) return;
-    const edge = deleted[0]; const link = graph.links.find((value) => value.id === edge?.id); if (!link) return;
-    const touchesFinal = graph.nodes.some((node) => (node.id === link.originNodeId || node.id === link.destinationNodeId) && node.lineStatus === "final");
-    if (!window.confirm(touchesFinal ? "This link touches Final content. Remove it and reopen the affected flow?" : "Remove this dialogue link?")) return;
-    await window.reed.mutate("unlinkNodes", { linkId: link.id, expectedVersion: graph.version, source: "human", force: touchesFinal }); await onMutated();
+  const beforeDelete = async ({ nodes: requestedNodes, edges: requestedEdges }: { nodes: CardNode[]; edges: Edge[] }) => {
+    if (!graph) return false;
+    setGraphError("");
+    const records = requestedNodes.map((node) => graph.nodes.find((record) => record.id === node.id)).filter((record): record is DialogueNodeRecord => Boolean(record) && record?.kind !== "start");
+    const startSelected = requestedNodes.some((node) => graph.nodes.find((record) => record.id === node.id)?.kind === "start");
+    if (requestedNodes.length > 0) {
+      if (records.length === 0) {
+        window.alert("The START node cannot be deleted.");
+        return false;
+      }
+      const finalCount = records.filter((record) => record.lineStatus === "final").length;
+      const subject = records.length === 1 ? `line ${records[0]?.lineId}` : `${records.length} selected nodes`;
+      const finalWarning = finalCount > 0 ? ` ${finalCount} selected ${finalCount === 1 ? "line is" : "lines are"} Final.` : "";
+      const startWarning = startSelected ? " The START node will be kept." : "";
+      if (!window.confirm(`Delete ${subject}? This removes the selected ${records.length === 1 ? "node" : "nodes"} and their links.${finalWarning}${startWarning} A local backup is created automatically, and permanent IDs are never reused.`)) return false;
+      let expectedVersion = graph.version;
+      try {
+        for (const record of records) {
+          const result = await window.reed.mutate("deleteNode", { lineId: record.lineId, confirmation: record.lineId, expectedVersion, source: "human", force: record.lineStatus === "final" }) as { version: number };
+          expectedVersion = result.version;
+        }
+        await onMutated();
+      } catch (value) {
+        setGraphError(message(value));
+        await onMutated();
+      }
+      return false;
+    }
+    const links = requestedEdges.map((edge) => graph.links.find((link) => link.id === edge.id)).filter((link): link is ConversationGraph["links"][number] => Boolean(link));
+    if (links.length === 0) return false;
+    const touchesFinal = links.some((link) => graph.nodes.some((node) => (node.id === link.originNodeId || node.id === link.destinationNodeId) && node.kind !== "start" && node.lineStatus === "final"));
+    const subject = links.length === 1 ? "this dialogue link" : `${links.length} selected dialogue links`;
+    if (!window.confirm(`Remove ${subject}?${touchesFinal ? " The selection touches Final content." : ""} A local backup is created automatically.`)) return false;
+    let expectedVersion = graph.version;
+    try {
+      for (const link of links) {
+        const result = await window.reed.mutate("unlinkNodes", { linkId: link.id, expectedVersion, source: "human", force: touchesFinal }) as { version: number };
+        expectedVersion = result.version;
+      }
+      await onMutated();
+    } catch (value) {
+      setGraphError(message(value));
+      await onMutated();
+    }
+    return false;
+  };
+  const persistPositions = async (movedNodes: CardNode[]) => {
+    if (!graph) return;
+    const changed = movedNodes.map((moved) => ({ moved, record: graph.nodes.find((node) => node.id === moved.id) }))
+      .filter(({ moved, record }) => record && (record.x !== moved.position.x || record.y !== moved.position.y)) as Array<{ moved: CardNode; record: DialogueNodeRecord }>;
+    if (changed.length === 0) return;
+    setGraphError("");
+    let expectedVersion = graph.version;
+    try {
+      for (const { moved, record } of changed) {
+        const result = await window.reed.mutate("updateNode", { lineId: record.lineId, x: moved.position.x, y: moved.position.y, expectedVersion, source: "human", force: record.lineStatus === "final" }) as { version: number };
+        expectedVersion = result.version;
+      }
+      await onMutated();
+    } catch (value) {
+      setGraphError(message(value));
+      await onMutated();
+    }
   };
   if (!graph) return <div className="workspace-empty"><h2>Select a conversation</h2><p>The graph, playtest, and translation workspaces follow the same selection.</p></div>;
-  return <div className="graph-workspace"><div className="graph-tools"><span>Add</span><button onClick={() => void add("line")}>Line</button><button onClick={() => void add("choice")}>Choice</button><button onClick={() => void add("group")}>Junction</button><small>Select a link and press Delete to unlink</small></div><ReactFlow<CardNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView minZoom={0.2} maxZoom={1.8} onNodesChange={onNodesChange} onNodeClick={(_event, node) => onSelect(node.id)} onConnect={(value) => void connect(value)} onEdgesDelete={(value) => void removeEdge(value)} onNodeDragStop={(_event, moved) => { const record = graph.nodes.find((node) => node.id === moved.id); if (record) void window.reed.mutate("updateNode", { lineId: record.lineId, x: moved.position.x, y: moved.position.y, expectedVersion: graph.version, source: "human", force: false }).then(onMutated); }}>
+  return <div className="graph-workspace"><div className="graph-tools"><span>Add</span><button onClick={() => void add("line")}>Line</button><button onClick={() => void add("choice")}>Choice</button><button onClick={() => void add("group")}>Junction</button><small>{selectedCount > 0 ? `${selectedCount} selected · Delete selected` : "Drag to select · Space-drag to pan · Delete selected"}</small></div>{graphError && <div className="graph-error error-banner" role="alert">{graphError}</div>}<ReactFlow<CardNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView minZoom={0.2} maxZoom={1.8} onNodesChange={onNodesChange} selectionOnDrag selectionMode={SelectionMode.Partial} panOnDrag={[1, 2]} panActivationKeyCode="Space" multiSelectionKeyCode={["Meta", "Control", "Shift"]} deleteKeyCode={["Backspace", "Delete"]} onNodeClick={(event, node) => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey) onSelect(node.id); }} onConnect={(value) => void connect(value)} onBeforeDelete={(elements) => beforeDelete(elements)} onNodeDragStop={(_event, _moved, movedNodes) => void persistPositions(movedNodes)}>
     <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#334038" /><Controls position="bottom-right" /><MiniMap pannable zoomable nodeColor={(node) => pathIds.has(node.id) ? "#b6cb78" : "#344139"} /></ReactFlow></div>;
 }
 

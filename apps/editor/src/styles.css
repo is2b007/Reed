@@ -101,6 +101,8 @@ button.tree-heading { width:100%; border:0; background:transparent; text-align:l
 .graph-tools span { margin:0 4px; color:var(--muted); font:9px "IBM Plex Mono"; text-transform:uppercase; }
 .graph-tools button { padding:4px 8px; font-size:10px; }
 .graph-tools small { margin:0 5px 0 8px; color:var(--muted); font-size:9px; }
+.graph-error { position:absolute; z-index:9; top:54px; left:12px; max-width:min(520px,calc(100% - 24px)); }
+.react-flow__selection, .react-flow__nodesselection-rect { border:1px solid var(--reed2); background:#b6cb781c; }
 .react-flow__controls { border:1px solid var(--line2); box-shadow:none; }
 .react-flow__controls-button { background:var(--raised); border-bottom-color:var(--line); fill:var(--sub); }
 .react-flow__minimap { background:#141a16; border:1px solid var(--line2); }
