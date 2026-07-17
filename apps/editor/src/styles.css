@@ -81,17 +81,18 @@ button.tree-heading { width:100%; border:0; background:transparent; text-align:l
 .code { font-family:"IBM Plex Mono"; color:#d3d9ba !important; }
 .danger-action { margin:14px 12px; color:#efaaa4; border-color:#7a423e; background:#271817; }
 .error-banner { margin:10px 0; padding:9px 11px; border-left:2px solid var(--bad); background:#2a1b1a; color:#f0b9b4; font-size:11px; }
-.prompt-backdrop { position:fixed; z-index:200; inset:0; display:grid; place-items:center; padding:16px; background:#080b09c7; }
+.prompt-backdrop { position:fixed; z-index:200; inset:0; display:grid; place-items:center; padding:16px; overflow:auto; background:#080b09c7; }
 .prompt-dialog { width:min(440px,calc(100vw - 32px)); padding:20px; border:1px solid var(--line2); background:var(--panel); box-shadow:0 28px 80px #000c; }
 .prompt-dialog header { margin-bottom:18px; }
 .prompt-dialog h2 { margin:0; font-size:22px; font-weight:500; }
 .prompt-dialog header>p:last-child:not(.eyebrow) { margin:8px 0 0; color:var(--sub); font-size:12px; line-height:1.5; }
 .prompt-dialog label { display:grid; gap:7px; color:var(--sub); font-size:11px; }
-.prompt-dialog input, .prompt-dialog select { width:100%; margin-top:2px; }
+.prompt-dialog input, .prompt-dialog textarea, .prompt-dialog select { width:100%; margin-top:2px; }
 .prompt-dialog>small { display:block; margin-top:8px; color:var(--muted); font-size:10px; }
 .prompt-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
 .prompt-actions .danger { color:#fff; border-color:#9f4d47; background:#773b37; font-weight:600; }
 .prompt-actions .danger:hover { border-color:#c66a62; background:#914943; }
+.character-create-dialog.metadata-form { width:min(760px,calc(100vw - 32px)); max-height:calc(100vh - 32px); margin:0; padding:20px; overflow:auto; border:1px solid var(--line2); }
 .dot { width:9px; height:9px; border-radius:50%; background:var(--muted); }
 .status-draft { --status:#7693ad; }.status-polished { --status:#71b5bd; }.status-edited { --status:#d4aa64; }.status-final { --status:#78b58a; }.status-rework { --status:#d7776f; }.status-placeholder { --status:#818d84; }
 .dot[class*="status-"] { background:var(--status); }
@@ -211,6 +212,7 @@ button.tree-heading { width:100%; border:0; background:transparent; text-align:l
   .play-line { margin:18px 0; padding:20px; }
   .play-line p { font-size:18px; }
   .character-list { grid-template-columns:1fr; }
+  .character-create-dialog .metadata-grid { grid-template-columns:1fr; }
   .export-actions { flex-wrap:wrap; }
   .read-view { padding:36px 18px 70px; }
   .read-view>header { margin-bottom:36px; }

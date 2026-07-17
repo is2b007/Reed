@@ -296,19 +296,62 @@ function Translation({ graph, snapshot, primary, secondary, onSelect }: { graph:
     {graph.nodes.filter((node) => node.kind !== "start" && node.kind !== "group").flatMap((node) => [<button className="tr-key" key={`${node.id}-key`} onClick={() => onSelect(node.id)}><code>{node.lineId}</code><span>{snapshot.characters.find((character) => character.id === node.speakerCharacterId)?.name ?? "Unassigned"}</span></button>, ...snapshot.project.languages.map((language) => { const value = node.texts.find((text) => text.language === language); return <button className={`tr-cell ${value?.text ? "covered" : "missing"}`} key={`${node.id}-${language}`} onClick={() => onSelect(node.id)}>{value?.text || `Missing ${language}`}<small>{value?.verificationStatus === "native-verified" ? "✓ Native verified" : "Unverified"}</small></button>; })])}</div></div>;
 }
 
-function CharacterEditor({ character, languages, projectVersion, lineCount, open, onOpen, onClose, onSaved }: { character: CharacterRecord; languages: string[]; projectVersion: number; lineCount: number; open: boolean; onOpen(): void; onClose(): void; onSaved(): Promise<void> }) {
-  const [name, setName] = useState(character.name);
-  const [description, setDescription] = useState(character.description);
-  const [actorNotes, setActorNotes] = useState(character.actorNotes);
-  const [voiceNotes, setVoiceNotes] = useState(character.voiceNotes);
-  const [portraitPath, setPortraitPath] = useState(character.portraitPath ?? "");
-  const [isPlayer, setIsPlayer] = useState(character.isPlayer);
-  const [displayNames, setDisplayNames] = useState(character.displayNames);
+interface CharacterDraft {
+  name: string;
+  displayNames: Record<string, string>;
+  isPlayer: boolean;
+  portraitPath: string;
+  description: string;
+  actorNotes: string;
+  voiceNotes: string;
+}
+
+function characterDraft(character?: CharacterRecord): CharacterDraft {
+  return character ? {
+    name: character.name, displayNames: character.displayNames, isPlayer: character.isPlayer,
+    portraitPath: character.portraitPath ?? "", description: character.description,
+    actorNotes: character.actorNotes, voiceNotes: character.voiceNotes,
+  } : { name: "", displayNames: {}, isPlayer: false, portraitPath: "", description: "", actorNotes: "", voiceNotes: "" };
+}
+
+function CharacterFields({ value, languages, autoFocus, onChange }: { value: CharacterDraft; languages: string[]; autoFocus?: boolean; onChange(value: CharacterDraft): void }) {
+  const update = <Key extends keyof CharacterDraft>(key: Key, next: CharacterDraft[Key]) => onChange({ ...value, [key]: next });
+  return <><div className="metadata-grid"><label>Character name<input autoFocus={autoFocus} value={value.name} required maxLength={120} onChange={(event) => update("name", event.target.value)} /></label><label className="checkbox-label"><input type="checkbox" checked={value.isPlayer} onChange={(event) => update("isPlayer", event.target.checked)} /> Player character</label></div>
+    <label>Character description<textarea rows={3} maxLength={8000} value={value.description} onChange={(event) => update("description", event.target.value)} /></label>
+    <div className="metadata-grid">{languages.map((language) => <label key={language}>Display name · {language.toUpperCase()}<input value={value.displayNames[language] ?? ""} maxLength={200} onChange={(event) => update("displayNames", { ...value.displayNames, [language]: event.target.value })} /></label>)}</div>
+    <div className="metadata-grid"><label>Actor direction<textarea rows={3} maxLength={8000} value={value.actorNotes} onChange={(event) => update("actorNotes", event.target.value)} /></label><label>Voice notes<textarea rows={3} maxLength={8000} value={value.voiceNotes} onChange={(event) => update("voiceNotes", event.target.value)} /></label></div>
+    <label>Local portrait path<input value={value.portraitPath} maxLength={1000} placeholder="Optional file path" onChange={(event) => update("portraitPath", event.target.value)} /></label></>;
+}
+
+function CharacterCreateDialog({ languages, projectVersion, onClose, onCreated }: { languages: string[]; projectVersion: number; onClose(): void; onCreated(): Promise<void> }) {
+  const [draft, setDraft] = useState<CharacterDraft>(() => characterDraft());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const reset = () => { setName(character.name); setDescription(character.description); setActorNotes(character.actorNotes); setVoiceNotes(character.voiceNotes); setPortraitPath(character.portraitPath ?? ""); setIsPlayer(character.isPlayer); setDisplayNames(character.displayNames); setError(""); };
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
+    const { name, displayNames, isPlayer, portraitPath, description, actorNotes, voiceNotes } = draft;
+    try {
+      setSaving(true); setError("");
+      await window.reed.mutate("upsertCharacter", { name, displayNames, isPlayer, portraitPath: portraitPath.trim() || null, description, actorNotes, voiceNotes, expectedVersion: projectVersion, source: "human" });
+      await onCreated(); onClose();
+    } catch (value) { setError(message(value)); } finally { setSaving(false); }
+  };
+  return <div className="prompt-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><form className="prompt-dialog character-create-dialog metadata-form" role="dialog" aria-modal="true" aria-labelledby="character-create-title" onSubmit={(event) => void save(event)} onKeyDown={(event) => { event.stopPropagation(); if (event.key === "Escape") { event.preventDefault(); onClose(); } }}>
+    <header><p className="eyebrow">Cast registry</p><h2 id="character-create-title">Add character details</h2><p>Create the complete cast record now. You can still edit every field later.</p></header>
+    <CharacterFields value={draft} languages={languages} autoFocus onChange={setDraft} />
+    {error && <div className="error-banner" role="alert">{error}</div>}
+    <div className="prompt-actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary" type="submit" disabled={saving || !draft.name.trim()}>{saving ? "Creating…" : "Create character"}</button></div>
+  </form></div>;
+}
+
+function CharacterEditor({ character, languages, projectVersion, lineCount, open, onOpen, onClose, onSaved }: { character: CharacterRecord; languages: string[]; projectVersion: number; lineCount: number; open: boolean; onOpen(): void; onClose(): void; onSaved(): Promise<void> }) {
+  const [draft, setDraft] = useState<CharacterDraft>(() => characterDraft(character));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const reset = () => { setDraft(characterDraft(character)); setError(""); };
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const { name, displayNames, isPlayer, portraitPath, description, actorNotes, voiceNotes } = draft;
     try {
       setSaving(true); setError("");
       await window.reed.mutate("upsertCharacter", { id: character.id, name, displayNames, isPlayer, portraitPath: portraitPath.trim() || null, description, actorNotes, voiceNotes, expectedVersion: projectVersion, source: "human" });
@@ -319,14 +362,9 @@ function CharacterEditor({ character, languages, projectVersion, lineCount, open
     <div className="avatar">{character.name.slice(0, 2).toUpperCase()}</div>
     <div className="character-content"><div className="registry-card-heading"><div><h3>{character.name}{character.isPlayer && <span>Player</span>}</h3><p>{character.description || "No character description"}</p><small>Actor ID {character.numericId} · {lineCount} lines</small></div><button type="button" onClick={open ? () => { reset(); onClose(); } : onOpen}>{open ? "Cancel" : "Edit"}</button></div>
       {open && <form className="metadata-form" onSubmit={(event) => void save(event)}>
-        <div className="metadata-grid"><label>Character name<input autoFocus value={name} required maxLength={120} onChange={(event) => setName(event.target.value)} /></label><label className="checkbox-label"><input type="checkbox" checked={isPlayer} onChange={(event) => setIsPlayer(event.target.checked)} /> Player character</label></div>
-        <label>Character description<textarea rows={3} maxLength={8000} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
-        <div className="metadata-grid">{languages.map((language) => <label key={language}>Display name · {language.toUpperCase()}<input value={displayNames[language] ?? ""} maxLength={200} onChange={(event) => setDisplayNames((current) => ({ ...current, [language]: event.target.value }))} /></label>)}</div>
-        <label>Actor direction<textarea rows={3} maxLength={8000} value={actorNotes} onChange={(event) => setActorNotes(event.target.value)} /></label>
-        <label>Voice notes<textarea rows={3} maxLength={8000} value={voiceNotes} onChange={(event) => setVoiceNotes(event.target.value)} /></label>
-        <label>Local portrait path<input value={portraitPath} maxLength={1000} placeholder="Optional file path" onChange={(event) => setPortraitPath(event.target.value)} /></label>
+        <CharacterFields value={draft} languages={languages} autoFocus onChange={setDraft} />
         {error && <div className="error-banner" role="alert">{error}</div>}
-        <div className="metadata-actions"><button type="button" onClick={() => { reset(); onClose(); }}>Cancel</button><button className="primary" type="submit" disabled={saving || !name.trim()}>{saving ? "Saving…" : "Save character"}</button></div>
+        <div className="metadata-actions"><button type="button" onClick={() => { reset(); onClose(); }}>Cancel</button><button className="primary" type="submit" disabled={saving || !draft.name.trim()}>{saving ? "Saving…" : "Save character"}</button></div>
       </form>}
     </div>
   </article>;
@@ -363,12 +401,13 @@ function VariableEditor({ variable, projectVersion, open, onOpen, onClose, onSav
 
 function Characters({ snapshot, refresh }: { snapshot: ProjectSnapshot; refresh(): Promise<void> }) {
   const prompt = usePrompt();
+  const [creatingCharacter, setCreatingCharacter] = useState(false);
   const [editingCharacterId, setEditingCharacterId] = useState<string | null>(null);
   const [editingVariableName, setEditingVariableName] = useState<string | null>(null);
-  const add = async () => { const name = await prompt({ title: "Add character", label: "Character name", confirmLabel: "Create character" }); if (!name) return; const result = await window.reed.mutate("upsertCharacter", { name, displayNames: {}, isPlayer: false, portraitPath: null, description: "", actorNotes: "", voiceNotes: "", expectedVersion: snapshot.project.version, source: "human" }) as { value?: { id?: string } }; await refresh(); if (result.value?.id) setEditingCharacterId(result.value.id); };
+  const add = () => setCreatingCharacter(true);
   const addVariable = async () => { const name = await prompt({ title: "Add variable", label: "Variable name", confirmLabel: "Choose type" }); if (!name) return; const requested = await prompt({ title: `Set type for ${name}`, label: "Variable type", confirmLabel: "Create variable", options: [{ value: "boolean", label: "Boolean" }, { value: "number", label: "Number" }, { value: "text", label: "Text" }] }); if (!requested) return; const initialValue = requested === "boolean" ? false : requested === "number" ? 0 : ""; const result = await window.reed.mutate("declareVariable", { name, type: requested, initialValue, description: "", expectedVersion: snapshot.project.version, source: "human" }) as { value?: { name?: string } }; await refresh(); if (result.value?.name) setEditingVariableName(result.value.name); };
   const usage = (id: string) => snapshot.conversations.reduce((total, conversation) => total + conversation.nodes.filter((node) => node.speakerCharacterId === id).length, 0);
-  return <div className="characters"><header><div><p className="eyebrow">Cast registry</p><h2>Characters</h2></div><button className="primary" onClick={() => void add()}>Add character</button></header><div className="character-list">{snapshot.characters.map((character) => <CharacterEditor key={`${character.id}-${character.updatedAt}`} character={character} languages={snapshot.project.languages} projectVersion={snapshot.project.version} lineCount={usage(character.id)} open={editingCharacterId === character.id} onOpen={() => setEditingCharacterId(character.id)} onClose={() => setEditingCharacterId(null)} onSaved={refresh} />)}</div><section className="variable-registry"><header><div><p className="eyebrow">Condition contract</p><h2>Declared variables</h2></div><button onClick={() => void addVariable()}>Add variable</button></header>{snapshot.variables.length ? <div>{snapshot.variables.map((variable) => <VariableEditor key={`${variable.id}-${variable.updatedAt}`} variable={variable} projectVersion={snapshot.project.version} open={editingVariableName === variable.name} onOpen={() => setEditingVariableName(variable.name)} onClose={() => setEditingVariableName(null)} onSaved={refresh} />)}</div> : <p>No variables declared.</p>}</section></div>;
+  return <div className="characters"><header><div><p className="eyebrow">Cast registry</p><h2>Characters</h2></div><button className="primary" onClick={add}>Add character</button></header><div className="character-list">{snapshot.characters.map((character) => <CharacterEditor key={`${character.id}-${character.updatedAt}`} character={character} languages={snapshot.project.languages} projectVersion={snapshot.project.version} lineCount={usage(character.id)} open={editingCharacterId === character.id} onOpen={() => setEditingCharacterId(character.id)} onClose={() => setEditingCharacterId(null)} onSaved={refresh} />)}</div><section className="variable-registry"><header><div><p className="eyebrow">Condition contract</p><h2>Declared variables</h2></div><button onClick={() => void addVariable()}>Add variable</button></header>{snapshot.variables.length ? <div>{snapshot.variables.map((variable) => <VariableEditor key={`${variable.id}-${variable.updatedAt}`} variable={variable} projectVersion={snapshot.project.version} open={editingVariableName === variable.name} onOpen={() => setEditingVariableName(variable.name)} onClose={() => setEditingVariableName(null)} onSaved={refresh} />)}</div> : <p>No variables declared.</p>}</section>{creatingCharacter && <CharacterCreateDialog languages={snapshot.project.languages} projectVersion={snapshot.project.version} onClose={() => setCreatingCharacter(false)} onCreated={refresh} />}</div>;
 }
 
 function Validation({ report, onJump }: { report: ValidationReport; onJump(issue: ValidationIssue): void }) {
