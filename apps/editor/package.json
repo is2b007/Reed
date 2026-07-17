@@ -1,7 +1,7 @@
 {
   "name": "@reed/editor",
   "productName": "Reed",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Offline branching dialogue editor for Unity and Pixel Crushers",
   "private": true,
   "type": "module",
