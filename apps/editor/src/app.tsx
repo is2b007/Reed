@@ -30,6 +30,11 @@ const secondaryWorkspaceGroups = [
 ];
 const secondaryWorkspaces = secondaryWorkspaceGroups.flatMap((group) => group.items);
 const secondaryWorkspaceIndex = new Map(secondaryWorkspaces.map((workspace, index) => [workspace.id, index]));
+const desktopPanelMedia = "(min-width: 901px)";
+
+function desktopPanelLayout(): boolean {
+  return typeof window !== "undefined" && window.matchMedia(desktopPanelMedia).matches;
+}
 
 const DialogueCard = memo(({ data, selected }: NodeProps<CardNode>) => {
   const node = data.record;
@@ -117,27 +122,38 @@ function Welcome({ onReady }: { onReady(value: EditorBootstrap): void }) {
 }
 
 function Navigator({ snapshot, selectedConversationId, open, onConversation, onScene, onClose }: { snapshot: ProjectSnapshot; selectedConversationId: string | null; open: boolean; onConversation(id: string): void; onScene(id: string): void; onClose(): void }) {
-  return <nav className={`navigator ${open ? "panel-open" : ""}`} aria-label="Project navigator">
+  const [collapsedLevels, setCollapsedLevels] = useState<Set<string>>(() => new Set());
+  const toggleLevel = (levelId: string) => setCollapsedLevels((current) => {
+    const next = new Set(current);
+    if (next.has(levelId)) next.delete(levelId); else next.add(levelId);
+    return next;
+  });
+  return <nav id="project-navigator" className={`navigator ${open ? "panel-open" : ""}`} aria-label="Project navigator">
     <div className="panel-title"><span>Project</span><kbd>⌘K</kbd><button className="panel-close" aria-label="Close project navigator" onClick={onClose}>×</button></div>
     <div className="project-name"><i />{snapshot.project.name}</div>
-    {snapshot.levels.map((level) => <div className="tree-level" key={level.id}><div className="tree-heading">⌄ {level.name}</div>
-      {snapshot.scenes.filter((scene) => scene.levelId === level.id).map((scene) => <SceneTree key={scene.id} sceneId={scene.id} snapshot={snapshot} selected={selectedConversationId} onConversation={onConversation} onScene={onScene} />)}
-    </div>)}
+    {snapshot.levels.map((level) => { const expanded = !collapsedLevels.has(level.id); return <div className="tree-level" key={level.id}>
+      <button className="tree-heading level" aria-expanded={expanded} onClick={() => toggleLevel(level.id)}><span className="disclosure" aria-hidden="true">⌄</span>{level.name}</button>
+      {expanded && snapshot.scenes.filter((scene) => scene.levelId === level.id).map((scene) => <SceneTree key={scene.id} sceneId={scene.id} snapshot={snapshot} selected={selectedConversationId} onConversation={onConversation} onScene={onScene} />)}
+    </div>; })}
     {snapshot.scenes.filter((scene) => !scene.levelId).map((scene) => <SceneTree key={scene.id} sceneId={scene.id} snapshot={snapshot} selected={selectedConversationId} onConversation={onConversation} onScene={onScene} />)}
     {snapshot.scenes.length === 0 && <div className="panel-empty">No scenes yet.<br />Create the first beat from Beat map.</div>}
   </nav>;
 }
 
 function SceneTree({ sceneId, snapshot, selected, onConversation, onScene }: { sceneId: string; snapshot: ProjectSnapshot; selected: string | null; onConversation(id: string): void; onScene(id: string): void }) {
+  const [expanded, setExpanded] = useState(true);
   const scene = snapshot.scenes.find((candidate) => candidate.id === sceneId);
   if (!scene) return null;
-  return <div className="tree-scene"><button className="tree-heading scene" onClick={() => onScene(scene.id)}>⌄ {scene.name}<small>{scene.beatRef}</small></button>
-    {snapshot.conversations.filter((conversation) => conversation.sceneId === scene.id).map((conversation) => <button key={conversation.id} className={`tree-conversation ${selected === conversation.id ? "active" : ""}`} onClick={() => onConversation(conversation.id)}><span>↳</span>{conversation.title}<em>v{conversation.version}</em></button>)}
+  return <div className="tree-scene"><div className="tree-scene-row">
+    <button className="tree-disclosure" aria-label={`${expanded ? "Collapse" : "Expand"} ${scene.name}`} aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}><span aria-hidden="true">⌄</span></button>
+    <button className="tree-heading scene" aria-label={`Open ${scene.name} in Beat map`} onClick={() => onScene(scene.id)}><span>{scene.name}</span><small>{scene.beatRef}</small></button>
+  </div>
+    {expanded && snapshot.conversations.filter((conversation) => conversation.sceneId === scene.id).map((conversation) => <button key={conversation.id} className={`tree-conversation ${selected === conversation.id ? "active" : ""}`} aria-current={selected === conversation.id ? "page" : undefined} onClick={() => onConversation(conversation.id)}><span>↳</span>{conversation.title}<em>v{conversation.version}</em></button>)}
   </div>;
 }
 
 function Inspector({ graph, node, primary, secondary, languages, characters, open, onMutated, onClose }: { graph: ConversationGraph; node: DialogueNodeRecord | null; primary: string; secondary: string; languages: string[]; characters: CharacterRecord[]; open: boolean; onMutated(): Promise<void>; onClose(): void }) {
-  if (!node) return <aside className={`inspector ${open ? "panel-open" : ""}`}><div className="panel-title"><span>Inspector</span><button className="panel-close" aria-label="Close inspector" onClick={onClose}>×</button></div><div className="panel-empty">Select a line to edit its text, production state, and logic.</div></aside>;
+  if (!node) return <aside id="line-inspector" className={`inspector ${open ? "panel-open" : ""}`}><div className="panel-title"><span>Inspector</span><button className="panel-close" aria-label="Close inspector" onClick={onClose}>×</button></div><div className="panel-empty">Select a line to edit its text, production state, and logic.</div></aside>;
   return <InspectorForm key={`${node.id}-${node.updatedAt}-${primary}-${secondary}`} graph={graph} node={node} primary={primary} secondary={secondary} languages={languages} characters={characters} open={open} onMutated={onMutated} onClose={onClose} />;
 }
 
@@ -171,7 +187,7 @@ function InspectorForm({ graph, node, primary, secondary, languages, characters,
     if (!window.confirm(`Delete line ${node.lineId}? This removes the node and its links.${finalWarning} A local backup is created automatically, and permanent IDs are never reused.`)) return;
     void mutate("deleteNode", { lineId: node.lineId, confirmation: node.lineId, force: node.lineStatus === "final" });
   };
-  return <aside className={`inspector ${open ? "panel-open" : ""}`}>
+  return <aside id="line-inspector" className={`inspector ${open ? "panel-open" : ""}`}>
     <div className="panel-title"><span>Line inspector</span><span className={`dot status-${node.lineStatus}`} /><button className="panel-close" aria-label="Close inspector" onClick={onClose}>×</button></div>
     <section><div className="inspector-id">{node.lineId}<button onClick={() => navigator.clipboard.writeText(node.lineId)}>Copy</button></div>
       <div className="field-grid"><label>Speaker<select value={node.speakerCharacterId ?? ""} onChange={(event) => void mutate("updateNode", { lineId: node.lineId, speakerCharacterId: event.target.value || null, force: forceRework() })}><option value="">Unassigned</option>{characters.map((character) => <option key={character.id} value={character.id}>{character.name}</option>)}</select></label>
@@ -499,7 +515,7 @@ function EditorApp() {
   const [state, setState] = useState<EditorBootstrap | null>(null); const [workspace, setWorkspace] = useState<Workspace>("graph");
   const [conversationId, setConversationId] = useState<string | null>(null); const [graph, setGraph] = useState<ConversationGraph | null>(null); const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [primary, setPrimary] = useState("en"); const [secondary, setSecondary] = useState("el"); const [search, setSearch] = useState(""); const [results, setResults] = useState<SearchResult[]>([]); const [notice, setNotice] = useState("All changes saved locally");
-  const [navigatorOpen, setNavigatorOpen] = useState(false); const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [navigatorOpen, setNavigatorOpen] = useState(desktopPanelLayout); const [inspectorOpen, setInspectorOpen] = useState(desktopPanelLayout);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false); const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const workspaceMenuTriggerRef = useRef<HTMLButtonElement>(null); const workspaceMenuItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   useEffect(() => { void window.reed.getBootstrap().then((value) => { if (value) { setState(value); setPrimary(value.snapshot.project.defaultLanguage); setSecondary(value.snapshot.project.languages.find((language) => language !== value.snapshot.project.defaultLanguage) ?? value.snapshot.project.defaultLanguage); setConversationId(value.snapshot.conversations[0]?.id ?? null); } }); }, []);
@@ -507,13 +523,19 @@ function EditorApp() {
   useEffect(() => { void loadConversation(conversationId); }, [conversationId, loadConversation]);
   const refresh = useCallback(async () => { const next = await window.reed.getBootstrap(); if (next) { setState(next); if (conversationId) await loadConversation(conversationId); } }, [conversationId, loadConversation]);
   useEffect(() => { if (!state) return; const timer = window.setInterval(async () => { const changes = await window.reed.getChanges(state.lastChangeSequence); if (changes.length) { setNotice(`${changes.length} external change${changes.length === 1 ? "" : "s"} loaded`); await refresh(); } }, 1400); return () => window.clearInterval(timer); }, [state?.lastChangeSequence, refresh]);
+  useEffect(() => {
+    const media = window.matchMedia(desktopPanelMedia);
+    const syncPanels = (event: MediaQueryListEvent) => { setNavigatorOpen(event.matches); setInspectorOpen(event.matches); };
+    media.addEventListener("change", syncPanels);
+    return () => media.removeEventListener("change", syncPanels);
+  }, []);
   useEffect(() => { const listener = (event: KeyboardEvent) => {
     if (event.key === "Escape") { setNavigatorOpen(false); setInspectorOpen(false); setWorkspaceMenuOpen(false); return; }
     const shortcut = globalShortcut(event.key, event.metaKey || event.ctrlKey);
     if (!shortcut) return;
     event.preventDefault();
-    if (shortcut === "toggle-project") { setNavigatorOpen((value) => !value); setInspectorOpen(false); setWorkspaceMenuOpen(false); return; }
-    setWorkspace(shortcut); setNavigatorOpen(false); setInspectorOpen(false); setWorkspaceMenuOpen(false);
+    if (shortcut === "toggle-project") { setNavigatorOpen((value) => !value); if (!desktopPanelLayout()) setInspectorOpen(false); setWorkspaceMenuOpen(false); return; }
+    setWorkspace(shortcut); if (!desktopPanelLayout()) { setNavigatorOpen(false); setInspectorOpen(false); } setWorkspaceMenuOpen(false);
   }; window.addEventListener("keydown", listener); return () => window.removeEventListener("keydown", listener); }, []);
   useEffect(() => {
     if (!workspaceMenuOpen) return;
@@ -523,17 +545,17 @@ function EditorApp() {
   }, [workspaceMenuOpen]);
   if (!state) return <Welcome onReady={(value) => { setState(value); setPrimary(value.snapshot.project.defaultLanguage); setSecondary(value.snapshot.project.languages.find((language) => language !== value.snapshot.project.defaultLanguage) ?? value.snapshot.project.defaultLanguage); setConversationId(value.snapshot.conversations[0]?.id ?? null); }} />;
   const snapshot = state.snapshot; const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId) ?? null;
-  const chooseWorkspace = (id: Workspace) => { setWorkspace(id); setNavigatorOpen(false); setInspectorOpen(false); setWorkspaceMenuOpen(false); };
-  const chooseConversation = (id: string) => { setConversationId(id); setWorkspace("graph"); setNavigatorOpen(false); setInspectorOpen(false); };
+  const chooseWorkspace = (id: Workspace) => { setWorkspace(id); if (!desktopPanelLayout()) { setNavigatorOpen(false); setInspectorOpen(false); } setWorkspaceMenuOpen(false); };
+  const chooseConversation = (id: string) => { setConversationId(id); setWorkspace("graph"); if (!desktopPanelLayout()) { setNavigatorOpen(false); setInspectorOpen(false); } };
   const selectNode = (id: string) => { setSelectedNodeId(id); setInspectorOpen(true); };
   const focusWorkspaceMenuItem = (index: number) => window.requestAnimationFrame(() => workspaceMenuItemRefs.current[index]?.focus());
   const openWorkspaceMenu = (index: number) => { setWorkspaceMenuOpen(true); focusWorkspaceMenuItem(index); };
-  const jumpIssue = (issue: ValidationIssue) => { if (issue.conversationId) setConversationId(issue.conversationId); setWorkspace("graph"); setNavigatorOpen(false); window.setTimeout(() => { const node = graph?.nodes.find((candidate) => candidate.lineId === issue.lineId); if (node) { setSelectedNodeId(node.id); setInspectorOpen(true); } }, 100); };
+  const jumpIssue = (issue: ValidationIssue) => { if (issue.conversationId) setConversationId(issue.conversationId); setWorkspace("graph"); if (!desktopPanelLayout()) setNavigatorOpen(false); window.setTimeout(() => { const node = graph?.nodes.find((candidate) => candidate.lineId === issue.lineId); if (node) { setSelectedNodeId(node.id); setInspectorOpen(true); } }, 100); };
   const doSearch = async () => { setResults(search.trim() ? await window.reed.findLines({ query: search }) : []); };
-  return <div className="app-shell">
+  return <div className={`app-shell ${navigatorOpen ? "navigator-open" : "navigator-closed"} ${inspectorOpen ? "inspector-open" : "inspector-closed"}`}>
     <header className="command-bar">
       <div className="brand"><img src={reedLogo} alt="" /><b>Reed</b><i /><em>{snapshot.project.name}</em></div>
-      <div className="compact-panel-actions"><button className={navigatorOpen ? "active" : ""} aria-expanded={navigatorOpen} onClick={() => { setNavigatorOpen((value) => !value); setInspectorOpen(false); }}>Project</button>{(workspace === "graph" || workspace === "translation") && graph && <button className={inspectorOpen ? "active" : ""} aria-expanded={inspectorOpen} onClick={() => { setInspectorOpen((value) => !value); setNavigatorOpen(false); }}>Inspector</button>}</div>
+      <div className="compact-panel-actions"><button className={navigatorOpen ? "active" : ""} aria-controls="project-navigator" aria-expanded={navigatorOpen} onClick={() => { setNavigatorOpen((value) => !value); if (!desktopPanelLayout()) setInspectorOpen(false); }}>Project</button>{(workspace === "graph" || workspace === "translation") && graph && <button className={inspectorOpen ? "active" : ""} aria-controls="line-inspector" aria-expanded={inspectorOpen} onClick={() => { setInspectorOpen((value) => !value); if (!desktopPanelLayout()) setNavigatorOpen(false); }}>Inspector</button>}</div>
       <div className="workspace-navigation">
         <div className="workspace-tabs" aria-label="Authoring workspaces">{primaryWorkspaces.map((item) => <button key={item.id} className={workspace === item.id ? "active" : ""} aria-current={workspace === item.id ? "page" : undefined} onClick={() => chooseWorkspace(item.id)}>{item.label}<kbd>⌘{item.key}</kbd></button>)}</div>
         <div className="workspace-more" ref={workspaceMenuRef}>
