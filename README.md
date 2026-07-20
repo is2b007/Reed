@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>An offline-first branching dialogue workstation for Unity and Pixel Crushers.</strong><br>
+  <strong>An offline-first narrative design and production workspace for branching games.</strong><br>
   Write, localize, review, playtest, version, and export a story from macOS, Windows, or an Android tablet.
 </p>
 
@@ -24,7 +24,7 @@ Reed is built for narrative teams working on branching, multilingual dialogue. S
 Optional Git and GitHub collaboration is disabled per project until the author enables it. Android's Remote Agent Access is a separate, explicit, expiring session that exposes only guarded Reed tools to an external agent.
 
 > [!IMPORTANT]
-> Reed is pre-1.0 software. Keep project backups and verify Pixel Crushers output against the Unity/plugin versions used by your production before shipping a game.
+> Reed is pre-1.0 software. Keep project backups and verify generated output against the exact engine, localization, and production toolchain used by your game before shipping.
 
 ## See Reed
 
@@ -48,10 +48,10 @@ The screenshots use the disposable demo project created by [`scripts/create-demo
 ## What Reed includes
 
 - A visual graph for line, choice, junction, and cross-conversation flow, with direct connector dragging and create-on-drop.
-- Permanent Line IDs, stable Pixel Crushers numeric mappings, conditions, Lua, sequences, tags, variables, cast metadata, and voice context.
+- Permanent Line IDs, stable export mappings, conditions, scripts, sequences, tags, variables, cast metadata, and voice context.
 - Side-by-side languages, a 47-language game catalog with BCP 47 custom tags, translation coverage, local validation, read view, text-only playtest, beat map, review snapshots, and search.
 - Autosave with a visible state, SQLite/WAL history, rolling and named backups, deterministic JSON, and reversible or confirmed destructive actions.
-- Voice-actor PDFs, studio XLSX/CSV, screenplay Markdown, word/minute budgets, audio manifests, and Pixel Crushers JSON.
+- Voice-actor PDFs, studio XLSX/CSV, screenplay Markdown, word/minute budgets, audio manifests, and common game/localization exports—including Pixel Crushers Dialogue Database JSON.
 - Optional local Git checkpoints, branches, GitHub sync, and pull-request review from inside Reed.
 - A local stdio MCP server and CLI backed by the same versioned core contracts as the editor.
 
