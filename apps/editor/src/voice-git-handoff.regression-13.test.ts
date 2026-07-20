@@ -47,7 +47,8 @@ describe("voice production and quick history handoff", () => {
     expect(saveControl).toContain('if (next.state === "connected") setNotice(success)');
     expect(saveControl).not.toMatch(/setInterval|XMLHttpRequest|WebSocket/);
     expect(main).toContain("throw new Error(ipcErrorMessage(error))");
-    expect(main).toContain('execFileAsync("/usr/bin/open", [githubDeviceUrl]');
+    expect(main).toContain("shell.openExternal(githubDeviceUrl)");
+    expect(main).not.toContain('execFileAsync("/usr/bin/open"');
     expect(main).toContain("if (githubConnection) return githubConnection");
     expect(main).toContain('process.env.REED_GH_BROWSER = "/usr/bin/true"');
     expect(main).toContain("return await connectGitHubFromEditor()");

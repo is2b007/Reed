@@ -9,6 +9,7 @@ import {
   checkpointProjectGit,
   createProjectGitBranch,
   createProjectPullRequestHandoff,
+  exportGameData,
   exportProjectJson,
   exportPixelCrushers,
   exportScreenplay,
@@ -19,6 +20,8 @@ import {
   inspectProjectGit,
   setProjectGitRemote,
   validateProject,
+  GAME_EXPORT_FORMATS,
+  type GameExportFormat,
   type MutationSource,
 } from "@reed/core";
 
@@ -433,6 +436,20 @@ program.command("export-pixelcrushers")
   .option("--allow-invalid", "export despite validation errors", false)
   .action(async (options: { mode: "single" | "partitioned"; output?: string; allowInvalid: boolean }, command: Command) => {
     print(await useProject(command, (project) => exportPixelCrushers(project, { mode: options.mode, outputDirectory: options.output, allowInvalid: options.allowInvalid })), command);
+  });
+
+program.command("export-game-data")
+  .description("export localization data for common game engines and interchange tools")
+  .requiredOption("--format <format>", `format: ${GAME_EXPORT_FORMATS.join(", ")}`)
+  .option("--languages <codes>", "comma-separated enabled languages; defaults to all")
+  .option("-o, --output <directory>")
+  .action(async (options: { format: GameExportFormat; languages?: string; output?: string }, command: Command) => {
+    if (!GAME_EXPORT_FORMATS.includes(options.format)) throw new Error(`Unsupported format: ${options.format}`);
+    print(await useProject(command, (project) => exportGameData(project, {
+      format: options.format,
+      languages: options.languages?.split(",").map((value) => value.trim()).filter(Boolean),
+      outputDirectory: options.output,
+    })), command);
   });
 
 program.command("export-voice")

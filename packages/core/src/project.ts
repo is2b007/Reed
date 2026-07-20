@@ -275,6 +275,12 @@ export class ReedProject {
       const saveSetting = this.db.prepare(`INSERT INTO project_settings(project_id, key, value_json, updated_at)
         VALUES (?, ?, ?, ?) ON CONFLICT(project_id, key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`);
       const timestamp = now();
+      const addLanguageRows = this.db.prepare(`INSERT OR IGNORE INTO node_texts
+        (node_id, language_code, dialogue_text, menu_text, verification_status, created_at, updated_at)
+        SELECT node.id, ?, '', NULL, 'unverified', ?, ?
+        FROM dialogue_nodes node JOIN conversations conversation ON conversation.id = node.conversation_id
+        WHERE conversation.project_id = ?`);
+      for (const language of next.languages) addLanguageRows.run(language, timestamp, timestamp, project.id);
       saveSetting.run(project.id, "pull_request_provider", JSON.stringify(next.pullRequestProvider), timestamp);
       saveSetting.run(project.id, "pull_request_base_branch", JSON.stringify(next.pullRequestBaseBranch), timestamp);
       return this.commitProjectMutation(project, "project.update", input.source, next, input.expectedVersion);

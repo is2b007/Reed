@@ -39,6 +39,7 @@ class AndroidMcpDispatcherTest {
         val tools = dispatcher.dispatch(request(1, "tools/list", "{}"))!!.jsonObject
             .getValue("result").jsonObject.getValue("tools").jsonArray
         assertTrue(tools.any { it.jsonObject["name"]?.jsonPrimitive?.content == "add_dialogue_node" })
+        assertTrue(tools.any { it.jsonObject["name"]?.jsonPrimitive?.content == "update_project" })
         assertFalse(tools.any { it.jsonObject["name"]?.jsonPrimitive?.content?.contains("git") == true })
 
         val snapshot = core.exportSnapshot(core.listProjects().single().id)
@@ -50,6 +51,18 @@ class AndroidMcpDispatcherTest {
         assertFalse(toolPayload(added).getValue("isError").jsonPrimitive.content.toBoolean())
         val refreshed = core.conversationGraph(graph.id)
         assertEquals("Καλημέρα — buongiorno", refreshed.nodes.last().texts.first { it.language == "en" }.text)
+    }
+
+    @Test
+    fun agentCanConfigureCanonicalProjectLanguagesThroughCore() {
+        val project = core.exportSnapshot(core.listProjects().single().id).project
+        val response = toolCall(4, "update_project", """{
+            "languages":["en","el","pt_br"],"defaultLanguage":"pt-br","expectedVersion":${project.version}
+        }""")
+        assertFalse(toolPayload(response).getValue("isError").jsonPrimitive.content.toBoolean())
+        val updated = core.projectOverview(project.id).project
+        assertEquals(listOf("en", "el", "pt-BR"), updated.languages)
+        assertEquals("pt-BR", updated.defaultLanguage)
     }
 
     @Test

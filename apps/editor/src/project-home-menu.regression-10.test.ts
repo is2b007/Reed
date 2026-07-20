@@ -49,8 +49,10 @@ describe("project home and native menu regressions", () => {
 
     expect(settings).toContain('mutate("updateProject"');
     expect(settings).toContain("expectedVersion: project.version");
-    expect(settings).toContain("Enabled languages");
-    expect(settings).toContain("Default writing language");
+    expect(settings).toContain("LanguageConfigurator");
+    expect(source).toContain("Use game-market preset");
+    expect(source).toContain("Custom language tag");
+    expect(source).toContain("Default writing language");
     expect(settings).toContain("Project location");
   });
 

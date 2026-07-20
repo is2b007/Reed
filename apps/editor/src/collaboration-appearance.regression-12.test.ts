@@ -19,7 +19,8 @@ describe("collaboration and appearance regressions", () => {
     expect(git).toContain("GH_PROMPT_DISABLED");
     expect(git).toContain("GH_NO_UPDATE_NOTIFIER");
     expect(forge).toContain("extraResource: githubCliSource");
-    expect(main).not.toContain("shell.openExternal");
+    expect(main).toContain("shell.openExternal(githubDeviceUrl)");
+    expect(main).not.toContain('execFileAsync("/usr/bin/open"');
   });
 
   it("provides persisted Automatic, Light, and Dark themes in native and in-app settings", async () => {

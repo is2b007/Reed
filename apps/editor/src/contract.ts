@@ -12,7 +12,10 @@ import type {
 import type { RecentProject } from "./recent-projects.js";
 
 export type WorkspaceId = "graph" | "beats" | "playtest" | "translation" | "characters" | "variables" | "validation" | "review" | "production" | "history" | "read";
-export type ExportKind = "project" | "pixel-single" | "pixel-partitioned" | "voice" | "screenplay";
+export type ExportKind =
+  | "project" | "pixel-single" | "pixel-partitioned" | "voice" | "screenplay"
+  | "game-json" | "game-csv" | "unity-localization" | "godot"
+  | "unreal-string-table" | "yarn-spinner" | "gettext" | "xliff-2.0";
 export type SaveStateStatus = "saved" | "dirty" | "saving" | "error";
 export interface SaveStateEvent { status: SaveStateStatus; at?: string; message?: string; }
 export type AppearancePreference = "system" | "light" | "dark";

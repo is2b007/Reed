@@ -23,12 +23,14 @@ The `reed://schema` resource exposes the same schema descriptor for clients that
 - Content: `update_node_text`, `set_line_text`, `set_node_menu_text`, `update_node`, `set_node_conditions`, `set_node_sequence`, `add_tags`, `set_line_status`.
 - Registries: `upsert_character`, `declare_variable`.
 - Bulk: `import_conversation_json`, including deterministic breadth-first auto-layout.
-- Handoff: `export_pixelcrushers`, `export_voice`. Voice export accepts `language`, `characterIds`, `voiceStatuses`, and `lineStatuses`, and writes a studio master PDF, individual actor PDFs, an XLSX session tracker, and CSV interchange data.
+- Handoff: `export_pixelcrushers`, `export_voice`, `export_game_data`. Voice export accepts `language`, `characterIds`, `voiceStatuses`, and `lineStatuses`, and writes a studio master PDF, individual actor PDFs, an XLSX session tracker, and CSV interchange data. Game-data export accepts a common engine/interchange `format`, optional enabled `languages`, and an optional local output directory.
 
 Writes are recorded with source `agent`. Inputs accept `expectedVersion` where applicable. Stale versions return a structured conflict and change list. Agent-created lines default to Draft; an agent cannot set Edited/Final, finalize voice, or modify Final text even by passing force. Destructive deletion requires an exact Line-ID confirmation.
 
 The server intentionally contains no prompt, provider key, model selection, HTTP transport, or generation UI. Those belong to the external agent process.
 
 For voice work, agents can store pronunciation in `update_node.pronunciation`, story circumstances in `contextComment`, and playable intention in `voiceComment`. Keep those concerns separate so an actor packet remains scannable. Export fails when a selected line lacks exact text in the requested language; see [Voice production handoff](VOICE_PRODUCTION.md).
+
+`get_schema` exposes Reed's offline language catalog and BCP 47 contract. See [Languages and game localization exports](LOCALIZATION_EXPORTS.md) for stable Line ID behavior and the exact Unity, Godot, Unreal, Yarn Spinner, gettext, XLIFF, JSON, and CSV outputs.
 
 Git branches and remote GitHub actions intentionally remain editor-owned workflows rather than MCP mutations. An agent can update the project’s PR preference, but the local stdio MCP server never gets a hidden route to authenticate, fetch, push, review, or merge. A human must start every remote action from Reed's History workspace.

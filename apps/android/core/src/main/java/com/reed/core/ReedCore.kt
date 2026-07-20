@@ -68,8 +68,11 @@ class ReedCore(
     ): ProjectSnapshot {
         require(name.isNotBlank()) { "Project name is required" }
         require(slug.matches(Regex("^[a-z0-9][a-z0-9-]{1,62}$"))) { "Invalid project slug" }
-        require(languages.isNotEmpty() && languages.distinct().size == languages.size) { "Languages must be unique" }
-        require(defaultLanguage in languages) { "Default language must be configured" }
+        val normalizedLanguages = languages.map(GameLanguages::canonicalize)
+        val normalizedDefaultLanguage = GameLanguages.canonicalize(defaultLanguage)
+        require(normalizedLanguages.all(GameLanguages::isValidTag)) { "Languages must use valid BCP 47 tags" }
+        require(normalizedLanguages.isNotEmpty() && normalizedLanguages.map(String::lowercase).distinct().size == normalizedLanguages.size) { "Languages must be unique" }
+        require(normalizedDefaultLanguage in normalizedLanguages) { "Default language must be configured" }
         val now = Instant.now().toString()
         val projectId = uuid()
         val levelId = uuid()
@@ -84,8 +87,8 @@ class ReedCore(
                 id = projectId,
                 name = name.trim(),
                 slug = slug,
-                languages = languages,
-                defaultLanguage = defaultLanguage,
+                languages = normalizedLanguages,
+                defaultLanguage = normalizedDefaultLanguage,
                 version = 1,
                 createdAt = now,
                 updatedAt = now,
@@ -115,14 +118,14 @@ class ReedCore(
                             lineId = "${prefix}_start",
                             entryNumericId = 0,
                             kind = NodeKind.START,
-                            spokenLanguage = defaultLanguage,
+                            spokenLanguage = normalizedDefaultLanguage,
                             lineStatus = TextStatus.PLACEHOLDER,
                             voiceStatus = VoiceStatus.NONE,
                             x = 48.0,
                             y = 96.0,
                             createdAt = now,
                             updatedAt = now,
-                            texts = languages.map { NodeTextRecord(it, "", null, VerificationStatus.UNVERIFIED, now, now) },
+                            texts = normalizedLanguages.map { NodeTextRecord(it, "", null, VerificationStatus.UNVERIFIED, now, now) },
                         )
                     )
                 )
@@ -131,6 +134,50 @@ class ReedCore(
         )
         importSnapshot(snapshot, source = "human")
         return snapshot
+    }
+
+    fun updateProjectLanguages(
+        projectId: String,
+        languages: List<String>,
+        defaultLanguage: String,
+        expectedVersion: Long,
+        source: String = "human",
+    ): MutationResult<ProjectRecord> = transaction { db ->
+        validateSource(source)
+        val normalizedLanguages = languages.map(GameLanguages::canonicalize)
+        val normalizedDefaultLanguage = GameLanguages.canonicalize(defaultLanguage)
+        require(normalizedLanguages.all(GameLanguages::isValidTag)) { "Languages must use valid BCP 47 tags" }
+        require(normalizedLanguages.isNotEmpty()) { "Select at least one project language" }
+        require(normalizedLanguages.map(String::lowercase).distinct().size == normalizedLanguages.size) { "Languages must be unique" }
+        require(normalizedDefaultLanguage in normalizedLanguages) { "Default language must be configured" }
+        val before = readProject(db, projectId)
+        checkVersion(before.version, expectedVersion)
+        val now = Instant.now().toString()
+        db.execSQL(
+            "UPDATE projects SET languages_json = ?, default_language = ? WHERE id = ?",
+            arrayOf<Any?>(json.encodeToString(normalizedLanguages), normalizedDefaultLanguage, projectId),
+        )
+        val nodeIds = db.rawQuery("SELECT id FROM nodes WHERE project_id = ?", arrayOf(projectId)).use { cursor ->
+            buildList { while (cursor.moveToNext()) add(cursor.getString(0)) }
+        }
+        for (nodeId in nodeIds) for (language in normalizedLanguages) {
+            db.execSQL(
+                "INSERT OR IGNORE INTO node_texts (node_id,language,text_value,menu_text,verification_status,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+                arrayOf<Any?>(nodeId, language, "", null, VerificationStatus.UNVERIFIED.wire, now, now),
+            )
+        }
+        val version = incrementVersion(db, projectId, expectedVersion, now)
+        val after = before.copy(
+            languages = normalizedLanguages,
+            defaultLanguage = normalizedDefaultLanguage,
+            version = version,
+            updatedAt = now,
+        )
+        val sequence = recordMutation(
+            db, projectId, version, "update_project_languages", "project", projectId,
+            json.encodeToString(before), json.encodeToString(after), source,
+        )
+        MutationResult(after, version, sequence)
     }
 
     fun importProjectFile(file: File, source: String = "system"): ProjectSnapshot {

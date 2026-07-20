@@ -81,6 +81,23 @@ class ReedCoreTest {
     }
 
     @Test
+    fun projectLanguageSettingsAreVersionedCanonicalAndCreateMissingTextRows() {
+        val created = core.createProject("Language Test", "language-test", listOf("en", "el"), "en")
+        val updated = core.updateProjectLanguages(
+            created.project.id,
+            listOf("en", "pt_br", "zh-hans"),
+            "pt-br",
+            created.project.version,
+        )
+
+        assertEquals(listOf("en", "pt-BR", "zh-Hans"), updated.value.languages)
+        assertEquals("pt-BR", updated.value.defaultLanguage)
+        assertEquals(created.project.version + 1, updated.version)
+        val languages = core.conversationGraph(created.conversations.single().id).nodes.single().texts.map { it.language }
+        assertTrue(languages.containsAll(listOf("en", "el", "pt-BR", "zh-Hans")))
+    }
+
+    @Test
     fun mutationsEnforceOptimisticVersionAndRecordedTextReturnsToRework() {
         val created = core.createProject("Voice Test", "voice-test")
         val graph = created.conversations.single()

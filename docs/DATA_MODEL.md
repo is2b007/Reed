@@ -4,7 +4,7 @@
 
 `Project → Level? → Scene → Conversation → DialogueNode`
 
-- A project owns languages, cast, declared variables, database partitions, review baselines, and global version history.
+- A project owns an ordered set of IETF BCP 47 language tags, a default writing language, cast, declared variables, database partitions, review baselines, and global version history. Reed ships an offline game-language catalog but permits custom and private-use tags.
 - A level is an optional organizational container.
 - A scene freezes its slug-derived Line-ID prefix and stores an external `beatRef`.
 - A conversation maps one-to-one to a Pixel Crushers conversation and is an optimistic-concurrency aggregate.

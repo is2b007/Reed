@@ -148,6 +148,8 @@ The connector URL is stable for that local project, so it can be reused across l
 
 Remote tools can read project structure and create or edit scenes, conversations, characters, variables, text, nodes, links, conditions, sequences, tags, and layout through `com.reed.core.ReedCore`.
 
+`get_schema` also returns Reed's bundled game-language catalog and the IETF BCP 47 language-tag contract. `update_project` can change the active project's enabled languages and default writing language with `expectedVersion`; newly enabled languages receive blank text rows, while disabling a language preserves its existing text for later re-enabling. This is the same versioned operation used by Android's Project Settings workspace.
+
 They cannot:
 
 - execute Git, create commits, fetch, push, or open pull requests;

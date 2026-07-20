@@ -2,6 +2,8 @@
 
 Reed Android is designed for the Daylight DC-1's 10.5-inch, 1200×1600 grayscale LivePaper display and Android 13-based Sol:OS. It supports portrait, landscape, split-screen, touch, Wacom stylus selection, Bluetooth/USB keyboards, mice, and trackpads. Local projects, editing, SQLite storage, history, and exports work with Wi-Fi off.
 
+Project Settings is available from the labelled workspace rail. It provides the same offline 47-language game catalog as desktop, canonical BCP 47 tags, the game-market preset, search, custom tags, and a versioned default writing language. Removing a language from the active set preserves its stored text so re-enabling it is reversible. See [Languages and game localization exports](LOCALIZATION_EXPORTS.md).
+
 ## Build from source
 
 Requirements:

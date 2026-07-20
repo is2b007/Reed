@@ -49,32 +49,32 @@ The screenshots use the disposable demo project created by [`scripts/create-demo
 
 - A visual graph for line, choice, junction, and cross-conversation flow, with direct connector dragging and create-on-drop.
 - Permanent Line IDs, stable Pixel Crushers numeric mappings, conditions, Lua, sequences, tags, variables, cast metadata, and voice context.
-- Side-by-side languages, translation coverage, local validation, read view, text-only playtest, beat map, review snapshots, and search.
+- Side-by-side languages, a 47-language game catalog with BCP 47 custom tags, translation coverage, local validation, read view, text-only playtest, beat map, review snapshots, and search.
 - Autosave with a visible state, SQLite/WAL history, rolling and named backups, deterministic JSON, and reversible or confirmed destructive actions.
 - Voice-actor PDFs, studio XLSX/CSV, screenplay Markdown, word/minute budgets, audio manifests, and Pixel Crushers JSON.
 - Optional local Git checkpoints, branches, GitHub sync, and pull-request review from inside Reed.
 - A local stdio MCP server and CLI backed by the same versioned core contracts as the editor.
 
-## macOS and Android
+## Desktop and Android
 
-Reed has two native application shells over equivalent project rules.
+Reed has native desktop and Android application shells over equivalent project rules.
 
-| | macOS | Android / Daylight DC-1 |
-|---|---|---|
-| Interface | Electron, React, and React Flow | Kotlin and Jetpack Compose |
-| Current target | Apple silicon | Android 13+; tested on Daylight DC-1 |
-| Storage | `@reed/core`, SQLite in WAL mode | Android `ReedCore`, SQLite in WAL mode |
-| Input | Keyboard, mouse, and trackpad | Touch, hardware keyboard, mouse, trackpad, and Wacom EMR pen |
-| Canvas | Marquee select, live node drag, connector drop-to-create, trackpad pan, focal zoom | Responsive panes, pen hover, side-button marquee, connector drag, two-finger pan, focal pinch zoom |
-| Git | Bundled/system `git` and GitHub CLI credential store | Embedded JGit and optional Android Keystore token |
-| External agents | Local stdio MCP or CLI | Explicit foreground Remote Agent Access session |
-| Offline default | Yes | Yes |
+| | macOS | Windows | Android / Daylight DC-1 |
+|---|---|---|---|
+| Interface | Electron, React, and React Flow | Electron, React, and React Flow | Kotlin and Jetpack Compose |
+| Current target | Apple silicon | Windows 10/11 x64 | Android 13+; tested on Daylight DC-1 |
+| Storage | `@reed/core`, SQLite in WAL mode | `@reed/core`, SQLite in WAL mode | Android `ReedCore`, SQLite in WAL mode |
+| Input | Keyboard, mouse, and trackpad | Keyboard, mouse, and precision touchpad | Touch, hardware keyboard, mouse, trackpad, and Wacom EMR pen |
+| Canvas | Marquee select, live node drag, connector drop-to-create, trackpad pan, focal zoom | Same desktop graph interactions | Responsive panes, pen hover, side-button marquee, connector drag, two-finger pan, focal pinch zoom |
+| Git | System `git`; bundled or system GitHub CLI | Git for Windows and GitHub CLI | Embedded JGit and optional Android Keystore token |
+| External agents | Local stdio MCP or CLI | Local stdio MCP or CLI | Explicit foreground Remote Agent Access session |
+| Offline default | Yes | Yes | Yes |
 
-### macOS
+### macOS and Windows
 
 Download the latest Apple-silicon build from [GitHub Releases](https://github.com/is2b007/Reed/releases/latest), or build from source below. Published binary releases currently trail the active source tree, so contributors testing the newest Android, GitHub, and remote-agent work should build from `main`.
 
-The current development app is locally signed but not Apple-notarized. If macOS blocks it, Control-click **Reed.app**, choose **Open**, and confirm once. Intel macOS, Windows, and Linux packages are not currently produced.
+The macOS development app is locally signed but not Apple-notarized. If macOS blocks it, Control-click **Reed.app**, choose **Open**, and confirm once. The Windows ZIP is unsigned, so Windows may show a SmartScreen warning. Optional desktop GitHub collaboration uses the locally installed Git and GitHub CLI when a compatible CLI is not bundled.
 
 Build a local application bundle:
 
@@ -83,10 +83,11 @@ pnpm install --frozen-lockfile
 CI=true pnpm typecheck
 CI=true pnpm exec vitest run --no-file-parallelism --maxWorkers=1
 CI=true pnpm test:offline
-CI=true pnpm --filter @reed/editor package
+CI=true pnpm desktop:make:mac
+CI=true pnpm desktop:make:windows
 ```
 
-The application is written to `apps/editor/out/Reed-darwin-arm64/Reed.app`.
+The macOS DMG/ZIP and Windows x64 ZIP are written beneath `apps/editor/out/make/`. Building Windows from macOS downloads the target Electron runtime and target-native `better-sqlite3` prebuild; the resulting archive runs without a package-install step.
 
 ### Android and Daylight DC-1
 
@@ -225,6 +226,7 @@ The platform-level view is in [ARCHITECTURE.md](ARCHITECTURE.md).
 | [AI MCP playbook](docs/AI_MCP_PLAYBOOK.md) | Safe agent operating sequence |
 | [Project history](docs/PROJECT_HISTORY.md) | Backups, local Git, optional GitHub, and pull requests |
 | [Voice production](docs/VOICE_PRODUCTION.md) | Actor and studio export workflow |
+| [Languages and game exports](docs/LOCALIZATION_EXPORTS.md) | BCP 47 catalog plus Unity, Godot, Unreal, Yarn, PO, XLIFF, JSON, and CSV handoff |
 | [Offline contract](docs/OFFLINE_CONTRACT.md) | Allowed networking and release acceptance |
 | [Android / DC-1](docs/ANDROID_DC1.md) | Build, install, input, Git, and device verification |
 | [Remote Android MCP](docs/REMOTE_MCP_ANDROID.md) | Claude connector model and relay deployment |
