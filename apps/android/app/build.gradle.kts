@@ -25,8 +25,8 @@ android {
         applicationId = "com.reed.editor"
         minSdk = 33
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 9
+        versionName = "0.1.9"
         buildConfigField("String", "DEFAULT_AGENT_RELAY_URL", "\"$escapedDefaultAgentRelayUrl\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
