@@ -2,7 +2,7 @@
 
 ## Product
 
-Reed is a local-first dialogue-authoring toolkit for a Unity game using Pixel Crushers Dialogue System. It separates dialogue structure from multilingual line content and gives narrative designers, localization reviewers, voice production, and external generation agents one safe data core.
+Reed is an offline-first narrative design and production workspace for branching games. It brings visual story structure, multilingual dialogue, validation, playtesting, version history, voice production, common game-development exports, and guarded external-agent tools into one local project. Narrative designers, localization reviewers, writers, performers, and developers work against the same safe data core without depending on a hosted service.
 
 ## System shape
 
@@ -18,7 +18,7 @@ Reed is a local-first dialogue-authoring toolkit for a Unity game using Pixel Cr
 
 Scene records mirror the external Obsidian beat map through `beatRef`. Dialogue nodes carry a permanent scene-prefixed Line ID, speaker/listener references, multilingual text, menu text, branching links, optional Lua conditions and scripts, sequence commands, statuses, verification, VO context, and tags.
 
-Dialogue flow and line content remain separate. Numeric Pixel Crushers conversation and entry IDs are persisted and never regenerated after assignment.
+Dialogue flow and line content remain separate. Permanent Line IDs and format-specific numeric mappings are persisted and never regenerated after assignment.
 
 ## Human workflows
 
@@ -42,9 +42,13 @@ Dialogue flow and line content remain separate. Numeric Pixel Crushers conversat
 
 ## Languages
 
-Initial configured set: English, Greek, Italian, German, and Griko as its own language code. Each line has a spoken/base language; other languages can serve as subtitles or reference. All interfaces and exports use UTF-8 and full Unicode.
+Projects choose from a curated 47-language game catalog or add a custom BCP 47 tag. English, Greek, Italian, German, and Griko are first-class catalog entries rather than hard-coded limits. Each line has a spoken/base language; other languages can serve as subtitles or reference. All interfaces and exports use UTF-8 and full Unicode.
 
-## Pixel Crushers export
+## Game-development exports
+
+Reed produces deterministic JSON and CSV for general pipelines, localization interchange through GNU gettext PO and XLIFF 2.0, and ready-to-import string resources for Unity, Godot, Unreal, and Yarn Spinner. These formats hand off authored text and metadata without becoming a second source of truth.
+
+Pixel Crushers Dialogue System is a deeper optional integration for projects that need the complete branching graph:
 
 - One-way export: Reed is authoritative and Unity data is generated.
 - Export local DialogueDatabase JSON; no Pixel Crushers server or Arcweave API.
@@ -59,7 +63,7 @@ Initial configured set: English, Greek, Italian, German, and Griko as its own la
 1. Core + SQLite WAL + permanent IDs + validation + history/backups + migrations.
 2. Conversation graph schema and `get_schema`.
 3. CLI-proven vertical slice.
-4. Pixel Crushers export with golden-file Unity round-trip tests, split databases, and Base IDs.
+4. Deterministic game/localization exports plus the deeper Pixel Crushers graph contract, split databases, and Base IDs.
 5. Local MCP server and guardrails.
 6. Editor graph, characters, hierarchy navigator, and beat map.
 7. Play mode, filtering, search, and usage view.
