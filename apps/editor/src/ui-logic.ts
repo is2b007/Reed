@@ -46,7 +46,16 @@ export function speakerAccent(numericId: number): string {
 }
 
 export function parseLanguageList(value: string): string[] {
-  return [...new Set(value.toLowerCase().split(/[\s,]+/u).map((language) => language.trim()).filter(Boolean))];
+  const seen = new Set<string>();
+  const languages: string[] = [];
+  for (const raw of value.split(/[\s,]+/u).map((language) => language.trim()).filter(Boolean)) {
+    const language = canonicalizeLanguageCode(raw);
+    const identity = language.toLowerCase();
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    languages.push(language);
+  }
+  return languages;
 }
 
 export function nextAppearancePreference(value: AppearanceCyclePreference): AppearanceCyclePreference {
@@ -214,3 +223,4 @@ export function evaluatePlaytestCondition(source: string, variables: Record<stri
   if (index !== tokens.length) supported = false;
   return { allowed: supported && allowed, supported };
 }
+import { canonicalizeLanguageCode } from "@reed/schema";

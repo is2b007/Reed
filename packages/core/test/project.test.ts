@@ -58,6 +58,21 @@ describe("ReedProject", () => {
       .rejects.toMatchObject({ code: "STALE_VERSION" });
   });
 
+  it("canonicalizes added languages and preserves disabled language text", async () => {
+    const { project } = await createProject(["en", "el"]);
+    const conversation = await createConversation(project);
+    const line = (await project.addNode({ conversationId: conversation.id, text: "Source" })).value;
+    await project.setNodeText({ lineId: line.lineId, language: "el", text: "Πηγή" });
+    const current = project.getProject();
+    const changed = await project.updateProject({ languages: ["en", "pt-br"], defaultLanguage: "pt-br", expectedVersion: current.version });
+
+    expect(changed.value.languages).toEqual(["en", "pt-BR"]);
+    expect(changed.value.defaultLanguage).toBe("pt-BR");
+    const texts = project.getNodeByLineId(line.lineId).texts;
+    expect(texts).toContainEqual(expect.objectContaining({ language: "el", text: "Πηγή" }));
+    expect(texts).toContainEqual(expect.objectContaining({ language: "pt-BR", text: "" }));
+  });
+
   it("allocates stable Line IDs and persistent numeric IDs", async () => {
     const { root, project } = await createProject();
     const level = (await project.createLevel({ name: "Chapter One" })).value;

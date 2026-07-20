@@ -28,7 +28,7 @@ describe("project and production display helpers", () => {
   });
 
   it("normalizes language settings and gives every permanent actor ID a stable accent", () => {
-    expect(parseLanguageList("EN, el  it,el")).toEqual(["en", "el", "it"]);
+    expect(parseLanguageList("EN, el  it,el pt-br zh-hans")).toEqual(["en", "el", "it", "pt-BR", "zh-Hans"]);
     expect(speakerAccent(1)).toBe(speakerAccent(1));
     expect(speakerAccent(1)).not.toBe(speakerAccent(2));
   });

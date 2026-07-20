@@ -46,6 +46,9 @@ try {
   run(cli, ["--project", projectRoot, "--json", "export-pixelcrushers"]);
   run(cli, ["--project", projectRoot, "--json", "export-voice", "--language", "el"]);
   run(cli, ["--project", projectRoot, "--json", "export-screenplay", "--language", "el", "--reference-language", "en"]);
+  for (const format of ["json", "csv", "unity-localization", "godot", "unreal-string-table", "yarn-spinner", "gettext", "xliff-2.0"]) {
+    run(cli, ["--project", projectRoot, "--json", "export-game-data", "--format", format]);
+  }
 
   const client = new Client({ name: "reed-offline-smoke", version: "0.1.0" }, { capabilities: {} });
   const transport = new StdioClientTransport({
@@ -56,7 +59,7 @@ try {
   });
   await client.connect(transport);
   const tools = await client.listTools();
-  const requiredTools = ["import_conversation_json", "export_pixelcrushers", "update_project", "update_scene", "update_conversation", "declare_variable", "list_variables"];
+  const requiredTools = ["import_conversation_json", "export_pixelcrushers", "export_game_data", "update_project", "update_scene", "update_conversation", "declare_variable", "list_variables"];
   if (requiredTools.some((name) => !tools.tools.some((tool) => tool.name === name))) throw new Error("MCP tool surface is incomplete");
   const mcpScenes = await client.callTool({ name: "list_scenes", arguments: {} });
   const mcpScenePayload = JSON.parse(mcpScenes.content.find((item) => item.type === "text")?.text ?? "{}");
@@ -76,6 +79,8 @@ try {
   if (!mcpVariablePayload.data?.some((variable) => variable.name === "mcp_ready")) throw new Error("MCP variable registry integration failed offline");
   const validation = await client.callTool({ name: "get_validation_report", arguments: {} });
   if (validation.isError) throw new Error("MCP validation failed offline");
+  const gameExport = await client.callTool({ name: "export_game_data", arguments: { format: "godot", languages: ["en", "el"] } });
+  if (gameExport.isError) throw new Error("MCP game-data export failed offline");
   await client.close();
 
   const gitInit = JSON.parse(run(cli, ["--project", projectRoot, "--json", "git-init"])).data;
@@ -99,6 +104,8 @@ try {
   if (!projectJson.includes("The Salt Gate")) throw new Error("Deterministic project export is missing");
   const voicePdf = await readFile(path.join(projectRoot, "exports", "voice", "voice-actor-handoff.pdf"));
   if (voicePdf.subarray(0, 4).toString() !== "%PDF") throw new Error("Voice PDF was not produced offline");
+  const godotCsv = await readFile(path.join(projectRoot, "exports", "integrations", "godot", "the-salt-gate.godot.csv"), "utf8");
+  if (!godotCsv.includes('"keys","en","el"')) throw new Error("Godot localization export was not produced offline");
 
   const forbidden = /\bfetch\s*\(|new\s+WebSocket\b|EventSource\b|sendBeacon\b|electron-updater|autoUpdater|@sentry|posthog|amplitude|url\(\s*["']?https?:|<(?:script|link|img)[^>]+(?:src|href)=["']https?:/iu;
   for (const area of [path.join(repository, "apps"), path.join(repository, "packages")]) {

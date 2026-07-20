@@ -5,7 +5,7 @@
 - Electron + Electron Forge for the desktop editor; React runs in a sandboxed renderer and receives a narrow typed API through `contextBridge`.
 - pnpm workspace with TypeScript packages. No web server is required at runtime.
 - `better-sqlite3` in WAL mode behind `@reed/core`; Forge rebuilds the native module for packaged Electron targets.
-- macOS arm64 and x64 are the first signed distribution targets. Windows follows after the same offline acceptance suite passes there.
+- macOS arm64 and Windows x64 are desktop distribution targets. Both package the same sandboxed renderer and rebuild `better-sqlite3` for the target runtime.
 - MCP uses stdio only and the stable v1 TypeScript SDK until MCP v2 leaves beta.
 - Pixel Crushers export is fixture-gated. No exporter is called compatible until a Unity-authored database has passed import, export, and two-database collision tests.
 
@@ -38,7 +38,7 @@ The renderer, MCP server, and CLI never issue SQL. All mutation rules, status gu
 3. **Complete — Local MCP:** stable v1 SDK over stdio, read/mutation/import/export tools, schema resource, structured errors, stale-write handling, and agent guardrails.
 4. **Complete — Editor foundation:** packaged Electron shell, runtime egress denial, project picker, navigator, React Flow editing, inspector, cast/variable registry, and beat map.
 5. **Complete for the production vertical slice:** playtest, search/jump, usage counts, validation/jump, review approval, translation coverage/editing, verification states, dual language, and external-change reload. Advanced multi-line bulk selection remains a future efficiency enhancement, not a data-model dependency.
-6. **Complete except external credentials — Handoff and distribution:** screenplay Markdown/read view, VO budget, Unicode PDF/CSV/XLSX, unsigned arm64 macOS app bundle, native-module packaging checks, and offline acceptance. Apple signing/notarization requires the distributor's certificate and account; x64/Windows builds require those target runners.
+6. **Complete except external signing credentials — Handoff and distribution:** screenplay Markdown/read view, VO budget, Unicode PDF/CSV/XLSX, locally signed arm64 macOS DMG/ZIP, unsigned Windows x64 ZIP, target-native module packaging checks, and offline acceptance. Apple notarization and Windows code signing require distributor certificates.
 
 ## Quality gates
 
@@ -52,6 +52,6 @@ The renderer, MCP server, and CLI never issue SQL. All mutation rules, status gu
 ## Deliberate boundaries
 
 - Pixel Crushers version certification is blocked on a real Unity-authored sample, not on exporter implementation.
-- Windows/Linux distribution, Apple signing, and notarization require target runners or owner credentials.
+- Windows code signing, Apple distribution signing/notarization, and Linux distribution require target runners or owner credentials.
 - Optional local push into a Unity project is not required; local JSON import remains the supported one-way path.
 - LLM prompts, credentials, model SDKs, accounts, telemetry, and hosted services are permanently out of scope.

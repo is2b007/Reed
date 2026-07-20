@@ -25,6 +25,7 @@ import {
 import {
   ReedError,
   ReedProject,
+  exportGameData,
   exportPixelCrushers,
   exportVoicePackage,
   getSchemaDescriptor,
@@ -99,6 +100,11 @@ register("import_conversation_json", "Bulk-create and deterministically auto-lay
 register("export_pixelcrushers", "Validate and export local Pixel Crushers DialogueDatabase JSON.", z.object({
   mode: z.enum(["single", "partitioned"]).default("single"), outputDirectory: z.string().optional(), allowInvalid: z.boolean().default(false),
 }), (args) => exportPixelCrushers(project, args));
+register("export_game_data", "Export local engine and localization interchange files using permanent Reed Line IDs.", z.object({
+  format: z.enum(["json", "csv", "unity-localization", "godot", "unreal-string-table", "yarn-spinner", "gettext", "xliff-2.0"]),
+  outputDirectory: z.string().optional(),
+  languages: z.array(z.string()).optional(),
+}), (args) => exportGameData(project, args));
 register("export_voice", "Export local voice-actor PDF and studio CSV/XLSX files.", z.object({
   outputDirectory: z.string().optional(), language: z.string().optional(), characterIds: z.array(z.string().uuid()).optional(), voiceStatuses: z.array(z.string()).optional(), lineStatuses: z.array(z.string()).optional(),
 }), (args) => exportVoicePackage(project, args));

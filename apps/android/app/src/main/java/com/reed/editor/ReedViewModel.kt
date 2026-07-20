@@ -26,7 +26,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 import java.security.MessageDigest
 
-enum class Workspace { GRAPH, CHARACTERS, VARIABLES, TRANSLATION, GIT, AGENT }
+enum class Workspace { GRAPH, CHARACTERS, VARIABLES, TRANSLATION, GIT, AGENT, SETTINGS }
 
 data class RepositoryConnection(
     val directory: File,
@@ -216,6 +216,17 @@ class ReedViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectLanguage(language: String) = mutableState.update { it.copy(selectedLanguage = language) }
+
+    fun updateProjectLanguages(languages: List<String>, defaultLanguage: String) {
+        val project = state.value.activeProject ?: return
+        io("Saving language settings") {
+            val result = core.updateProjectLanguages(project.id, languages, defaultLanguage, project.version)
+            reloadActive("Language settings saved")
+            mutableState.update { current ->
+                current.copy(selectedLanguage = current.selectedLanguage.takeIf { it in result.value.languages } ?: result.value.defaultLanguage)
+            }
+        }
+    }
 
     fun setWorkspace(workspace: Workspace) = mutableState.update { it.copy(workspace = workspace) }
 

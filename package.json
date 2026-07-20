@@ -1,7 +1,7 @@
 {
   "name": "reed",
   "version": "0.1.9",
-  "description": "Offline-first branching dialogue editor for Unity and Pixel Crushers on macOS and Android",
+  "description": "Offline-first branching dialogue and game-localization editor for macOS, Windows, and Android",
   "private": true,
   "type": "module",
   "homepage": "https://github.com/is2b007/Reed#readme",
@@ -34,6 +34,9 @@
     "android:build": "cd apps/android && ./gradlew assembleDebug",
     "android:test": "cd apps/android && ./gradlew testDebugUnitTest",
     "android:lint": "cd apps/android && ./gradlew lintDebug",
+    "desktop:make:mac": "pnpm --filter @reed/editor make:mac",
+    "desktop:make:windows": "pnpm --filter @reed/editor make:windows",
+    "desktop:make": "pnpm --filter @reed/editor make:desktop",
     "relay:deploy:aws": "./scripts/deploy-relay-lightsail.sh",
     "relay:verify": "node scripts/verify-relay.mjs",
     "test:watch": "vitest",

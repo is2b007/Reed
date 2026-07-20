@@ -52,9 +52,12 @@ Mutation commands accept `--expected-version` where relevant. Final content requ
 | `export-voice` | Studio master PDF, one PDF per actor, session XLSX, and CSV. Filter with `--language`, `--character`, `--status`, and `--line-status`. |
 | `voice-budget` | Per-character lines, words, and estimated minutes. |
 | `export-screenplay` | Golden-path Markdown in one or two languages. |
+| `export-game-data --format <format>` | Local game-engine and localization interchange: JSON, CSV, Unity Localization, Godot, Unreal String Tables, Yarn Spinner, gettext PO, or XLIFF 2.0. Optional `--languages` limits output files/columns. |
 
 Use `--help` on any command for its exact flags and defaults.
 
 Voice export always requires real dialogue in the requested language; Reed does not silently substitute another language in an actor script. `--character` accepts comma-separated character UUIDs, while `--status` and `--line-status` accept comma-separated production states. See [Voice production handoff](VOICE_PRODUCTION.md).
+
+Language settings accept canonical IETF BCP 47 tags such as `pt-BR`, `es-419`, `zh-Hans`, and private-use tags such as `x-griko`. See [Languages and game localization exports](LOCALIZATION_EXPORTS.md).
 
 The CLI remains an offline automation surface: its GitHub handoff command only prepares inert commands and never authenticates, fetches, pushes, reviews, or merges. People can perform those optional remote actions without Terminal in the editor's **History** workspace after enabling GitHub collaboration for that project. See [Local history and optional GitHub collaboration](PROJECT_HISTORY.md).

@@ -8,7 +8,11 @@ describe("export, history, and autosave regressions", () => {
 
     expect(production).toContain("Unity / Pixel Crushers");
     expect(production).toContain("Voice production");
-    expect(production).toContain("Story source & reading");
+    expect(production).toContain("Plain data, story source & reading");
+    expect(production).toContain("Game engines & localization tools");
+    expect(production).toContain("Unity Localization");
+    expect(production).toContain("Unreal Engine");
+    expect(production).toContain("XLIFF 2.0");
     expect(production).toContain("Show in Finder");
     expect(production).toContain('role={feedback.status === "error" ? "alert" : "status"}');
     expect(production).toContain('disabled={blocked || feedback?.status === "working"}');

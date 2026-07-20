@@ -1,6 +1,7 @@
 package com.reed.editor.agent
 
 import com.reed.core.NodeKind
+import com.reed.core.GameLanguages
 import com.reed.core.ProjectSnapshot
 import com.reed.core.ReedCore
 import com.reed.core.TextStatus
@@ -107,6 +108,16 @@ class AndroidMcpDispatcher(
             "list_variables" -> json.encodeToJsonElement(snapshot.variables)
             "find_lines" -> findLines(snapshot, arguments)
             "get_validation_report" -> validationReport(snapshot)
+            "update_project" -> {
+                val result = core.updateProjectLanguages(
+                    projectId = projectId,
+                    languages = arguments.optionalStringArray("languages") ?: snapshot.project.languages,
+                    defaultLanguage = arguments.optionalString("defaultLanguage") ?: snapshot.project.defaultLanguage,
+                    expectedVersion = arguments.long("expectedVersion"),
+                    source = "agent",
+                )
+                mutation(json.encodeToJsonElement(result.value), result.version, result.changeSequence)
+            }
             "create_scene" -> {
                 val result = core.createScene(
                     projectId = projectId,
@@ -320,6 +331,13 @@ class AndroidMcpDispatcher(
         put("textStatuses", JsonArray(TextStatus.entries.map { JsonPrimitive(it.name.lowercase()) }))
         put("agentMaximumTextStatus", "polished")
         put("languages", json.encodeToJsonElement(core.projectOverview(projectId).project.languages))
+        put("languageTagStandard", "IETF BCP 47")
+        put("gameLanguageCatalog", buildJsonArray {
+            GameLanguages.catalog.forEach { language -> add(buildJsonObject {
+                put("code", language.code); put("englishName", language.englishName); put("nativeName", language.nativeName)
+                put("direction", if (language.rightToLeft) "rtl" else "ltr")
+            }) }
+        })
         put("transport", "remote-streamable-http-via-user-authorized-tablet-bridge")
         put("gitAvailable", false)
     }
@@ -359,6 +377,7 @@ class AndroidMcpDispatcher(
             tool("list_variables", "List declared dialogue variables."),
             tool("find_lines", "Search local dialogue text.", optional = mapOf("query" to stringSchema(), "characterId" to stringSchema(), "limit" to integerSchema())),
             tool("get_validation_report", "Validate the active project."),
+            tool("update_project", "Update the active project's versioned language list and default writing language.", required = mapOf("expectedVersion" to integerSchema()), optional = mapOf("languages" to arraySchema(), "defaultLanguage" to stringSchema())),
             tool("create_scene", "Create an agent-sourced scene.", required = mapOf("name" to stringSchema(), "slug" to stringSchema(), "expectedVersion" to integerSchema()), optional = mapOf("beatRef" to stringSchema(), "sortOrder" to integerSchema())),
             tool("create_conversation", "Create a conversation with a permanent START node.", required = mapOf("sceneId" to stringSchema(), "title" to stringSchema(), "expectedVersion" to integerSchema()), optional = mapOf("description" to stringSchema())),
             tool("add_dialogue_node", "Add a Draft line, choice, or group/junction node.", required = mapOf("conversationId" to stringSchema(), "expectedVersion" to integerSchema()), optional = mapOf("kind" to enumSchema("line", "choice", "group"), "speakerCharacterId" to stringSchema(), "language" to stringSchema(), "text" to stringSchema(), "menuText" to stringSchema(), "x" to numberSchema(), "y" to numberSchema())),
@@ -430,7 +449,7 @@ class AndroidMcpDispatcher(
     companion object {
         private val SUPPORTED_PROTOCOLS = setOf("2025-06-18", "2025-03-26", "2024-11-05")
         private val MUTATING_TOOLS = setOf(
-            "create_scene", "create_conversation", "add_dialogue_node", "update_node_text", "set_line_text",
+            "update_project", "create_scene", "create_conversation", "add_dialogue_node", "update_node_text", "set_line_text",
             "set_node_menu_text", "set_node_speaker", "update_node", "set_node_conditions", "set_node_sequence",
             "add_tags", "set_line_status", "link_nodes", "unlink_nodes", "delete_node", "upsert_character", "declare_variable",
         )

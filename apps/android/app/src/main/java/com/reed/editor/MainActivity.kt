@@ -77,6 +77,7 @@ import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Source
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Translate
@@ -166,6 +167,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.reed.core.DialogueNodeRecord
+import com.reed.core.GameLanguages
 import com.reed.core.NodeKind
 import com.reed.core.ProjectOverview
 import com.reed.core.TextStatus
@@ -433,6 +435,7 @@ private fun ProjectScreen(
                     Workspace.VARIABLES -> VariableWorkspace(state, viewModel, Modifier.weight(1f))
                     Workspace.GIT -> GitWorkspace(state, viewModel, onCheckpoint, Modifier.weight(1f))
                     Workspace.AGENT -> AgentAccessWorkspace(state, viewModel, Modifier.weight(1f))
+                    Workspace.SETTINGS -> ProjectSettingsWorkspace(state, viewModel, Modifier.weight(1f))
                 }
             }
         }
@@ -519,6 +522,7 @@ private fun WorkspaceRail(selected: Workspace, viewModel: ReedViewModel) {
                 Workspace.VARIABLES -> Icons.Outlined.DataObject
                 Workspace.GIT -> Icons.Outlined.Source
                 Workspace.AGENT -> Icons.Outlined.Hub
+                Workspace.SETTINGS -> Icons.Outlined.Settings
             }
             val isSelected = workspace == selected
             Column(
@@ -2104,6 +2108,129 @@ private fun StatusBar(state: ReedUiState) {
 }
 
 @Composable
+private fun ProjectSettingsWorkspace(state: ReedUiState, viewModel: ReedViewModel, modifier: Modifier = Modifier) {
+    val project = state.activeProject ?: return
+    var languages by remember(project.id, project.updatedAt) { mutableStateOf(project.languages.toSet()) }
+    var defaultLanguage by remember(project.id, project.updatedAt) { mutableStateOf(project.defaultLanguage) }
+    var query by remember { mutableStateOf("") }
+    var customTag by remember { mutableStateOf("") }
+    var defaultMenuOpen by remember { mutableStateOf(false) }
+    val filtered = remember(query) {
+        val term = query.trim().lowercase()
+        if (term.isBlank()) GameLanguages.catalog else GameLanguages.catalog.filter {
+            it.code.lowercase().contains(term) || it.englishName.lowercase().contains(term) || it.nativeName.lowercase().contains(term)
+        }
+    }
+    val canonicalCustom = GameLanguages.canonicalize(customTag)
+    val customValid = GameLanguages.isValidTag(canonicalCustom) && languages.none { it.equals(canonicalCustom, true) }
+    val changed = languages.toList() != project.languages || defaultLanguage != project.defaultLanguage
+
+    fun setLanguages(next: Set<String>) {
+        languages = next
+        if (next.isNotEmpty() && defaultLanguage !in next) defaultLanguage = next.first()
+    }
+
+    LazyColumn(
+        modifier.fillMaxSize().padding(horizontal = 18.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 18.dp),
+    ) {
+        item {
+            Text("Project settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            Text("Configure the language contract stored with this project. Every change is versioned and remains local.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(18.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Languages", fontWeight = FontWeight.SemiBold)
+                    Text("IETF BCP 47 tags · ${languages.size} enabled", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                OutlinedButton(onClick = { setLanguages(GameLanguages.gameMarketPreset().toSet()) }) { Text("Game preset") }
+            }
+            Spacer(Modifier.height(8.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                languages.forEach { code ->
+                    OutlinedButton(onClick = { setLanguages(languages - code) }, shape = RoundedCornerShape(4.dp)) {
+                        Text(GameLanguages.displayName(code), maxLines = 1)
+                        Spacer(Modifier.width(6.dp))
+                        Text(code, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                        Spacer(Modifier.width(6.dp))
+                        Text("×")
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Find a language") },
+                placeholder = { Text("Name or tag") },
+                leadingIcon = { Icon(Icons.Outlined.Search, null) },
+                singleLine = true,
+            )
+            Spacer(Modifier.height(6.dp))
+        }
+        items(filtered, key = { it.code }) { language ->
+            LanguageCheckbox(
+                code = language.code,
+                checked = language.code in languages,
+                modifier = Modifier.fillMaxWidth(),
+                onCheckedChange = { checked -> setLanguages(if (checked) languages + language.code else languages - language.code) },
+            )
+        }
+        item {
+            if (filtered.isEmpty()) Text("No catalog result. Add a custom tag below.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = customTag,
+                    onValueChange = { customTag = it },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Custom BCP 47 tag") },
+                    placeholder = { Text("ga or x-fictional") },
+                    isError = customTag.isNotBlank() && !customValid,
+                    singleLine = true,
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    enabled = customValid,
+                    onClick = { setLanguages(languages + canonicalCustom); customTag = "" },
+                ) { Text("Add") }
+            }
+            Spacer(Modifier.height(14.dp))
+            Text("Default writing language", fontWeight = FontWeight.SemiBold)
+            Text("The source language writers author first. Translation can use any configured pair.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(6.dp))
+            Box {
+                OutlinedButton(
+                    onClick = { defaultMenuOpen = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    enabled = languages.isNotEmpty(),
+                ) {
+                    Icon(Icons.Outlined.Translate, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (languages.isEmpty()) "Choose a language" else GameLanguages.displayName(defaultLanguage), Modifier.weight(1f))
+                    Text(defaultLanguage, fontFamily = FontFamily.Monospace)
+                }
+                DropdownMenu(defaultMenuOpen, { defaultMenuOpen = false }) {
+                    languages.forEach { code -> DropdownMenuItem(
+                        text = { Text("${GameLanguages.displayName(code)} · $code") },
+                        onClick = { defaultLanguage = code; defaultMenuOpen = false },
+                    ) }
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            Button(
+                onClick = { viewModel.updateProjectLanguages(languages.toList(), defaultLanguage) },
+                enabled = changed && languages.isNotEmpty() && defaultLanguage in languages && state.busyLabel == null,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            ) { Text(if (state.busyLabel == "Saving language settings") "Saving…" else "Save language settings") }
+            Spacer(Modifier.height(8.dp))
+            Text("Removing a language from the active set does not erase its authored text. Re-enable the tag to restore it.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
 private fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, String, List<String>, String) -> Unit) {
     var name by remember { mutableStateOf("") }
     var slug by remember { mutableStateOf("") }
@@ -2114,7 +2241,12 @@ private fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, String
     val nameFocus = remember { FocusRequester() }
     val slugValid = slug.matches(Regex("^[a-z0-9]+(?:-[a-z0-9]+)*$")) && slug.length >= 2
     val canCreate = name.isNotBlank() && slugValid && languages.isNotEmpty() && sourceLanguage in languages
-    val languageOptions = listOf("en", "el", "it", "de", "griko")
+    var languageSearch by remember { mutableStateOf("") }
+    val languageOptions = GameLanguages.catalog.map { it.code }.filter { code ->
+        val definition = GameLanguages.definition(code)
+        val term = languageSearch.trim().lowercase()
+        term.isBlank() || code.lowercase().contains(term) || definition?.englishName?.lowercase()?.contains(term) == true || definition?.nativeName?.lowercase()?.contains(term) == true
+    }
     LaunchedEffect(Unit) { nameFocus.requestFocus() }
 
     Dialog(
@@ -2192,6 +2324,22 @@ private fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, String
                         Text("Project languages", fontWeight = FontWeight.SemiBold)
                         Text("Choose every language this story will contain.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(6.dp))
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = languageSearch,
+                                onValueChange = { languageSearch = it },
+                                modifier = Modifier.weight(1f),
+                                label = { Text("Find language") },
+                                leadingIcon = { Icon(Icons.Outlined.Search, null) },
+                                singleLine = true,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            OutlinedButton(onClick = {
+                                languages = GameLanguages.gameMarketPreset().toSet()
+                                if (sourceLanguage !in languages) sourceLanguage = "en"
+                            }) { Text("Game preset") }
+                        }
+                        Spacer(Modifier.height(6.dp))
                         if (useTwoLanguageColumns) {
                             languageOptions.chunked(2).forEach { rowLanguages ->
                                 Row(Modifier.fillMaxWidth()) {
@@ -2239,7 +2387,7 @@ private fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, String
                                 Text(sourceLanguage, fontFamily = FontFamily.Monospace)
                             }
                             DropdownMenu(sourceMenuOpen, { sourceMenuOpen = false }) {
-                                languageOptions.filter { it in languages }.forEach { code ->
+                                GameLanguages.catalog.map { it.code }.filter { it in languages }.forEach { code ->
                                     DropdownMenuItem(
                                         text = { Text("${languageName(code)} · $code") },
                                         onClick = { sourceLanguage = code; sourceMenuOpen = false },
@@ -2516,6 +2664,7 @@ private fun CommandPalette(state: ReedUiState, viewModel: ReedViewModel) {
         "Open Variables" to { viewModel.setWorkspace(Workspace.VARIABLES) },
         "Open Git" to { viewModel.setWorkspace(Workspace.GIT) },
         "Open Agent Access" to { viewModel.setWorkspace(Workspace.AGENT) },
+        "Open Project Settings" to { viewModel.setWorkspace(Workspace.SETTINGS) },
         "Sync Git" to { viewModel.sync() },
         "Back to Projects" to { viewModel.closeProject() },
     ).filter { it.first.contains(query, ignoreCase = true) }
@@ -2575,6 +2724,7 @@ private val Workspace.displayName: String get() = when (this) {
     Workspace.VARIABLES -> "Variables"
     Workspace.GIT -> "Git versioning"
     Workspace.AGENT -> "Agent access"
+    Workspace.SETTINGS -> "Project settings"
 }
 
 private val Workspace.shortLabel: String get() = when (this) {
@@ -2584,6 +2734,7 @@ private val Workspace.shortLabel: String get() = when (this) {
     Workspace.VARIABLES -> "Variables"
     Workspace.GIT -> "Git"
     Workspace.AGENT -> "Agent"
+    Workspace.SETTINGS -> "Settings"
 }
 
 private val TextStatus.displayName: String
@@ -2601,11 +2752,4 @@ private fun speakerAccentColor(characterId: String?): Color {
     return accents[(characterId.hashCode() and Int.MAX_VALUE) % accents.size]
 }
 
-private fun languageName(code: String) = when (code) {
-    "en" -> "English"
-    "el" -> "Greek"
-    "it" -> "Italian"
-    "de" -> "German"
-    "griko" -> "Griko"
-    else -> code
-}
+private fun languageName(code: String) = GameLanguages.displayName(code)

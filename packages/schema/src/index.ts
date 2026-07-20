@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { GAME_LANGUAGE_CATALOG, canonicalizeLanguageCode, isLanguageCode } from "./languages.js";
+
+export * from "./languages.js";
 
 export const SCHEMA_VERSION = 1 as const;
 
@@ -6,11 +9,11 @@ export const DEFAULT_LANGUAGES = ["en", "el", "it", "de", "griko"] as const;
 
 export const IdSchema = z.string().uuid();
 export const LineIdSchema = z.string().regex(/^[a-z0-9][a-z0-9_-]{3,63}$/);
-export const LanguageCodeSchema = z
-  .string()
-  .min(2)
-  .max(24)
-  .regex(/^[a-z][a-z0-9-]*$/);
+export const LanguageCodeSchema = z.preprocess(
+  (value) => typeof value === "string" ? canonicalizeLanguageCode(value) : value,
+  z.string().min(2).max(63)
+    .refine(isLanguageCode, "Use a valid BCP 47 language tag, for example en, pt-BR, zh-Hans, or x-griko"),
+);
 
 export const NodeKindSchema = z.enum(["start", "line", "choice", "group"]);
 export const TextStatusSchema = z.enum([
@@ -340,5 +343,7 @@ export function getSchemaDescriptor() {
     mutationSources: MutationSourceSchema.options,
     variableTypes: VariableTypeSchema.options,
     defaultLanguages: DEFAULT_LANGUAGES,
+    languageTagStandard: "IETF BCP 47",
+    gameLanguageCatalog: GAME_LANGUAGE_CATALOG,
   } as const;
 }

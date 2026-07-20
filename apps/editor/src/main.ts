@@ -1,8 +1,6 @@
 import path from "node:path";
-import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { promisify } from "node:util";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from "electron";
 import {
   ReedProject,
@@ -16,6 +14,7 @@ import {
   createProjectSnapshot,
   disabledProjectGitHubStatus,
   exportPixelCrushers,
+  exportGameData,
   exportProjectJson,
   exportScreenplay,
   exportVoicePackage,
@@ -39,7 +38,6 @@ let activeWorkspace: WorkspaceId = "graph";
 let appearancePreference: AppearancePreference = "system";
 let githubConnection: ReturnType<typeof connectProjectGitHub> | null = null;
 
-const execFileAsync = promisify(execFile);
 const githubDeviceUrl = "https://github.com/login/device";
 
 const workspaceMenuItems: Array<{ id: WorkspaceId; label: string; accelerator?: string }> = [
@@ -66,9 +64,9 @@ function appSettingsFile(): string {
 
 function configureBundledTools(): void {
   if (!app.isPackaged) return;
-  const bundledGitHubCli = path.join(process.resourcesPath, "gh");
+  const bundledGitHubCli = path.join(process.resourcesPath, process.platform === "win32" ? "gh.exe" : "gh");
   if (existsSync(bundledGitHubCli)) process.env.REED_GH_PATH = bundledGitHubCli;
-  process.env.REED_GH_BROWSER = "/usr/bin/true";
+  if (process.platform === "darwin") process.env.REED_GH_BROWSER = "/usr/bin/true";
 }
 
 function appearanceState(): AppearanceState {
@@ -148,11 +146,11 @@ function requestedScreenshotDimension(flag: "--screenshot-width" | "--screenshot
   return Number.isFinite(parsed) ? Math.max(minimum, parsed) : fallback;
 }
 
-function requestedScreenshotAction(): "save" | "github-status" | null {
+function requestedScreenshotAction(): "save" | "github-status" | "project-settings" | null {
   if (!requestedScreenshotPath()) return null;
   const index = process.argv.indexOf("--screenshot-action");
   const requested = index >= 0 ? process.argv[index + 1] : undefined;
-  return requested === "save" || requested === "github-status" ? requested : null;
+  return requested === "save" || requested === "github-status" || requested === "project-settings" ? requested : null;
 }
 
 function applicationMenuTemplate(): MenuItemConstructorOptions[] {
@@ -170,12 +168,18 @@ function applicationMenuTemplate(): MenuItemConstructorOptions[] {
     { type: "separator" },
     { label: "Clear Recent Projects", enabled: recentProjects.length > 0, click: () => { void clearRecentProjects(); } },
   );
-  const exportItems: Array<{ label: string; kind: ExportKind }> = [
-    { label: "Project JSON", kind: "project" },
-    { label: "Pixel Crushers — Single Database", kind: "pixel-single" },
-    { label: "Pixel Crushers — Partitioned", kind: "pixel-partitioned" },
-    { label: "Voice Package", kind: "voice" },
-    { label: "Screenplay", kind: "screenplay" },
+  const exportAction = (label: string, kind: ExportKind): MenuItemConstructorOptions => ({ label, click: () => sendMenuCommand({ type: "export", kind }) });
+  const exportSubmenu: MenuItemConstructorOptions[] = [
+    { label: "Pixel Crushers", submenu: [exportAction("Single Database", "pixel-single"), exportAction("Partitioned Databases", "pixel-partitioned")] },
+    { label: "Game Engines & Localization", submenu: [
+      exportAction("Unity Localization CSV", "unity-localization"), exportAction("Godot Localization CSV", "godot"),
+      exportAction("Unreal String Tables", "unreal-string-table"), exportAction("Yarn Spinner Strings", "yarn-spinner"),
+      exportAction("gettext PO", "gettext"), exportAction("XLIFF 2.0", "xliff-2.0"),
+    ] },
+    { label: "Plain Data", submenu: [exportAction("Localization JSON", "game-json"), exportAction("Localization CSV", "game-csv"), exportAction("Complete Reed Project JSON", "project")] },
+    { type: "separator" },
+    exportAction("Voice Package", "voice"),
+    exportAction("Screenplay", "screenplay"),
   ];
   const template: MenuItemConstructorOptions[] = [];
   if (process.platform === "darwin") template.push({
@@ -204,7 +208,7 @@ function applicationMenuTemplate(): MenuItemConstructorOptions[] {
         { label: "Close Project", accelerator: "CommandOrControl+Alt+W", enabled: hasProject, click: () => { void closeCurrentProject(true); } },
         { type: "separator" },
         { label: "Create Backup…", accelerator: "CommandOrControl+Shift+S", enabled: hasProject, click: () => sendMenuCommand({ type: "create-backup" }) },
-        { label: "Export", enabled: hasProject, submenu: exportItems.map((item) => ({ label: item.label, click: () => sendMenuCommand({ type: "export", kind: item.kind }) })) },
+        { label: "Export", enabled: hasProject, submenu: exportSubmenu },
         { type: "separator" },
         { role: "close" },
       ],
@@ -317,7 +321,7 @@ async function connectGitHubFromEditor() {
   if (githubConnection) return githubConnection;
   const projectRoot = requireGitHubProject().paths.root;
   githubConnection = (async () => {
-    try { await execFileAsync("/usr/bin/open", [githubDeviceUrl], { timeout: 10_000 }); }
+    try { await shell.openExternal(githubDeviceUrl); }
     catch { throw new Error(`Reed could not open GitHub in the default browser. Open ${githubDeviceUrl} manually, then try again.`); }
     return connectProjectGitHub(projectRoot);
   })();
@@ -423,6 +427,21 @@ function registerIpc(): void {
       lineStatuses: options.lineStatuses as string[] | undefined,
     });
     if (kind === "screenplay") return exportScreenplay(project, options.language as string | undefined, options.referenceLanguage as string | undefined);
+    const gameFormats = {
+      "game-json": "json",
+      "game-csv": "csv",
+      "unity-localization": "unity-localization",
+      godot: "godot",
+      "unreal-string-table": "unreal-string-table",
+      "yarn-spinner": "yarn-spinner",
+      gettext: "gettext",
+      "xliff-2.0": "xliff-2.0",
+    } as const;
+    if (kind in gameFormats) return exportGameData(project, {
+      format: gameFormats[kind as keyof typeof gameFormats],
+      outputDirectory: options.output as string | undefined,
+      languages: options.languages as string[] | undefined,
+    });
     throw new Error(`Unsupported export: ${kind}`);
   });
   ipcMain.handle("reed:git-status", async () => {
@@ -531,7 +550,11 @@ async function createWindow(): Promise<void> {
       await new Promise((resolve) => setTimeout(resolve, 3_000));
     }
     if (screenshotAction) {
-      await createdWindow.webContents.executeJavaScript(`(() => {
+      await createdWindow.webContents.executeJavaScript(screenshotAction === "project-settings" ? `(() => {
+        const button = document.querySelector("button.project-name");
+        if (!(button instanceof HTMLElement)) throw new Error("Project settings control is unavailable");
+        button.click();
+      })()` : `(() => {
         const button = document.querySelector("button.save-indicator");
         if (!(button instanceof HTMLElement)) throw new Error("Saved control is unavailable");
         button.click();
