@@ -1,7 +1,7 @@
 {
   "name": "reed",
   "version": "0.1.9",
-  "description": "Offline-first branching dialogue and game-localization editor for macOS and Android",
+  "description": "Offline-first branching dialogue and game-localization editor for macOS, Windows, and Android",
   "private": true,
   "type": "module",
   "homepage": "https://github.com/is2b007/Reed#readme",

@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>An offline-first branching dialogue workstation for Unity and Pixel Crushers.</strong><br>
-  Write, localize, review, playtest, version, and export a story from macOS or an Android tablet.
+  Write, localize, review, playtest, version, and export a story from macOS, Windows, or an Android tablet.
 </p>
 
 <p align="center">
@@ -111,7 +111,7 @@ Read [Android and Daylight DC-1 setup](docs/ANDROID_DC1.md) and the [Android arc
 
 ```mermaid
 flowchart LR
-    UI["macOS or Android editor"] --> Core["Reed Core contracts"]
+    UI["macOS, Windows, or Android editor"] --> Core["Reed Core contracts"]
     CLI["Local CLI"] --> Core
     MCP["Local stdio MCP"] --> Core
     Core --> DB["SQLite + WAL"]
