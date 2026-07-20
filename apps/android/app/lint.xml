@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- API 37 / AGP 9.1 releases are intentionally not used by this API 36 build. -->
+    <issue id="GradleDependency">
+        <ignore regexp="androidx\.core:core-ktx" />
+        <ignore regexp="androidx\.lifecycle:lifecycle-runtime-compose" />
+        <ignore regexp="androidx\.lifecycle:lifecycle-viewmodel-compose" />
+    </issue>
+
+    <!-- JGit owns this unused compatibility class; Reed uses Android's default HTTPS trust store. -->
+    <issue id="TrustAllX509TrustManager">
+        <ignore regexp="org\.eclipse\.jgit" />
+    </issue>
+</lint>

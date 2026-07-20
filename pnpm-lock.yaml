@@ -118,6 +118,12 @@ importers:
         specifier: ^3.25.0
         version: 3.25.76
 
+  apps/relay:
+    devDependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.17.5
+        version: 1.29.0(zod@3.25.76)
+
   packages/cli:
     dependencies:
       '@reed/core':

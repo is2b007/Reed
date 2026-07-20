@@ -4,10 +4,68 @@ export type WorkspaceShortcut =
   | "playtest"
   | "translation"
   | "characters"
+  | "variables"
   | "validation"
   | "review"
   | "production"
   | "read";
+
+export type AddableNodeKind = "line" | "choice" | "group";
+export type AppearanceCyclePreference = "system" | "light" | "dark";
+
+export const nodeKindOptions: ReadonlyArray<{ kind: AddableNodeKind; label: string; description: string; symbol: string }> = [
+  { kind: "line", label: "Line", description: "Spoken dialogue or narration with localized text and a speaker.", symbol: "L" },
+  { kind: "choice", label: "Choice", description: "A player-selectable response that branches the conversation.", symbol: "C" },
+  { kind: "group", label: "Junction", description: "A logic-only point for conditions, splitting, or merging paths; it has no spoken text.", symbol: "J" },
+];
+
+interface Point { x: number; y: number; }
+interface Size { width: number; height: number; }
+
+export function nodePositionForConnectionDrop(point: Point, kind: AddableNodeKind): Point {
+  const halfHeight = kind === "group" ? 33 : 54;
+  return { x: Math.round(point.x), y: Math.round(point.y - halfHeight) };
+}
+
+export function createPickerPosition(point: Point, viewport: Size, panel: Size = { width: 320, height: 300 }): Point {
+  const margin = 12;
+  const gap = 12;
+  const width = Math.min(panel.width, Math.max(0, viewport.width - margin * 2));
+  const height = Math.min(panel.height, Math.max(0, viewport.height - margin * 2));
+  const preferredX = point.x + gap + width <= viewport.width - margin ? point.x + gap : point.x - width - gap;
+  const preferredY = point.y + gap + height <= viewport.height - margin ? point.y + gap : point.y - height - gap;
+  return {
+    x: Math.min(Math.max(margin, preferredX), Math.max(margin, viewport.width - width - margin)),
+    y: Math.min(Math.max(margin, preferredY), Math.max(margin, viewport.height - height - margin)),
+  };
+}
+
+export function speakerAccent(numericId: number): string {
+  const hue = Math.round(((Math.max(1, numericId) * 137.508) % 360 + 360) % 360);
+  return `hsl(${hue} 48% 68%)`;
+}
+
+export function parseLanguageList(value: string): string[] {
+  return [...new Set(value.toLowerCase().split(/[\s,]+/u).map((language) => language.trim()).filter(Boolean))];
+}
+
+export function nextAppearancePreference(value: AppearanceCyclePreference): AppearanceCyclePreference {
+  if (value === "system") return "light";
+  if (value === "light") return "dark";
+  return "system";
+}
+
+export function conditionVariableNames(value: string): string[] {
+  const names = new Set<string>();
+  for (const match of value.matchAll(/Variable\s*\[\s*['"]([^'"]+)['"]\s*\]/gu)) if (match[1]) names.add(match[1]);
+  return [...names];
+}
+
+export function variableInitialValueLabel(type: "boolean" | "number" | "text", value: boolean | number | string): string {
+  if (type === "boolean") return value ? "True" : "False";
+  if (type === "text") return String(value).length > 0 ? `“${String(value)}”` : "Empty text";
+  return String(value);
+}
 
 const workspaceByKey: Record<string, WorkspaceShortcut> = {
   "1": "graph",
@@ -19,6 +77,7 @@ const workspaceByKey: Record<string, WorkspaceShortcut> = {
   "7": "review",
   "8": "production",
   "9": "read",
+  "0": "variables",
 };
 
 export function globalShortcut(key: string, modified: boolean): WorkspaceShortcut | "toggle-project" | null {

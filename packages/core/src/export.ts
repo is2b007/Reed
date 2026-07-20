@@ -16,6 +16,13 @@ export function createProjectSnapshot(reed: ReedProject): ProjectSnapshot {
     variables: reed.listVariables(),
     partitions: reed.listPartitions(),
     reviewSnapshots: reed.listReviewSnapshots(),
+    allocations: {
+      entryNumericIds: Object.fromEntries(
+        reed.listConversations()
+          .map((conversation) => [conversation.id, reed.getIssuedEntryNumericId(conversation.id)] as const)
+          .sort(([left], [right]) => left.localeCompare(right)),
+      ),
+    },
   };
 }
 

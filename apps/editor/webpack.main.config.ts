@@ -1,8 +1,22 @@
-import type { Configuration } from "webpack";
+import type { Compiler, Configuration } from "webpack";
+
+const emitCommonJsBoundary = {
+  apply(compiler: Compiler) {
+    compiler.hooks.thisCompilation.tap("ReedCommonJsBoundary", (compilation) => {
+      compilation.hooks.processAssets.tap({
+        name: "ReedCommonJsBoundary",
+        stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL,
+      }, () => {
+        compilation.emitAsset("package.json", new compiler.webpack.sources.RawSource('{"type":"commonjs"}\n'));
+      });
+    });
+  },
+};
 
 export const mainConfig: Configuration = {
   target: "electron-main",
   entry: "./src/main.ts",
+  plugins: [emitCommonJsBoundary],
   module: {
     rules: [
       { test: /native_modules[/\\].+\.node$/, use: "node-loader" },

@@ -1,7 +1,7 @@
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { rebuild } from "@electron/rebuild";
 import { execFileSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -17,6 +17,8 @@ const configDirectory = path.dirname(fileURLToPath(import.meta.url));
 const hoistedModules = path.resolve(configDirectory, "../../node_modules");
 const dmgStagingDirectory = path.join(tmpdir(), `reed-dmg-${process.pid}`);
 const dmgStagingApp = path.join(dmgStagingDirectory, "Reed.app");
+const githubCliSource = [process.env.REED_GH_PATH, "/opt/homebrew/bin/gh", "/usr/local/bin/gh"]
+  .find((candidate): candidate is string => Boolean(candidate && existsSync(candidate)));
 
 const includeNativeRuntime: NonNullable<ForgeConfig["packagerConfig"]>["afterPrune"] = [
   (buildPath, _electronVersion, _platform, _arch, callback) => {
@@ -50,6 +52,7 @@ const config: ForgeConfig = {
     appCategoryType: "public.app-category.developer-tools",
     name: "Reed",
     icon: path.join(configDirectory, "assets", "Reed.icns"),
+    extraResource: githubCliSource ? [realpathSync(githubCliSource)] : [],
     osxSign: {
       identity: "-",
       identityValidation: false,
@@ -72,6 +75,7 @@ const config: ForgeConfig = {
       mkdirSync(dmgStagingDirectory, { recursive: true });
       execFileSync("/usr/bin/ditto", ["--noextattr", "--noqtn", options.appPath, dmgStagingApp]);
       execFileSync("/usr/bin/xattr", ["-cr", dmgStagingApp]);
+      execFileSync("/usr/bin/codesign", ["--verify", "--deep", "--strict", dmgStagingApp], { stdio: "inherit" });
       return [
         { x: 448, y: 344, type: "link", path: "/Applications" },
         { x: 192, y: 344, type: "file", path: dmgStagingApp },

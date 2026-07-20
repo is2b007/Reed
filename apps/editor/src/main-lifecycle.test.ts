@@ -16,4 +16,16 @@ describe("editor window lifecycle", () => {
     expect(navigation).toBeGreaterThan(-1);
     expect(readyListener).toBeLessThan(navigation);
   });
+
+  it("reveals an existing hidden or minimized window when Reed is activated", async () => {
+    const source = await readFile(new URL("./main.ts", import.meta.url), "utf8");
+    const lifecycle = source.slice(source.indexOf("function revealWindow"), source.indexOf("void app.whenReady"));
+
+    expect(lifecycle).toContain("isMinimized()");
+    expect(lifecycle).toContain("restore()");
+    expect(lifecycle).toContain("show()");
+    expect(lifecycle).toContain("focus()");
+    expect(lifecycle).toContain('app.on("activate"');
+    expect(lifecycle).toContain("revealWindow(window)");
+  });
 });

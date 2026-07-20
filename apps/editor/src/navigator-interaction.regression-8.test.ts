@@ -12,8 +12,9 @@ describe("project navigator interactions", () => {
     expect(styles).toMatch(/@media\s*\(min-width:901px\)[\s\S]*\.app-shell\.navigator-closed/);
     expect(source).not.toContain('className="compact-panel-actions"');
     expect(source).toContain('className="panel-restore project"');
-    expect(source).toContain('className="panel-restore inspector"');
+    expect(source).toContain('className="panel-restore panel-restore-inspector"');
     expect(styles).toMatch(/\.panel-restore\s*\{/);
+    expect(styles).toContain(".panel-restore-inspector");
     expect(styles).toContain(".app-shell.inspector-closed>aside.inspector");
     expect(styles).not.toContain(".compact-panel-actions");
   });

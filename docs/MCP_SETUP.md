@@ -4,6 +4,8 @@ This guide is for the person installing Reed. The companion [AI MCP playbook](AI
 
 Reed MCP is a local stdio process. Your AI client starts it, sends MCP messages through standard input/output, and stops it when the client closes. Reed MCP does not open a port, contact an LLM, or make network requests. It opens one existing Reed project per server process.
 
+This local setup is for desktop clients. For Claude Android editing a project stored on the same tablet, follow [Remote MCP from Claude Android](REMOTE_MCP_ANDROID.md). That separate, explicitly enabled mode uses a time-limited public relay because Android apps cannot start each other's local stdio processes.
+
 ## 1. Build the local MCP server
 
 Open Terminal and run:
@@ -172,6 +174,9 @@ A correct connection should expose these read tools:
 - `find_lines`
 - `get_validation_report`
 - `list_characters`
+- `list_variables`
+
+Project metadata and the condition registry can also be maintained through the versioned `update_project` and `declare_variable` tools. Agents should read `list_projects` or `list_variables` first and pass `expectedVersion` on writes where the schema supports it.
 
 The server also exposes the `reed://schema` MCP resource.
 

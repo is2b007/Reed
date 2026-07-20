@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="@color/reed_icon_foreground" android:pathData="M35,24 L45,24 L45,84 L35,84 Z" />
+    <path android:fillColor="@color/reed_icon_foreground" android:pathData="M45,30 C65,30 75,38 75,51 C75,61 69,68 59,71 L77,84 L63,84 L46,70 L46,60 L57,60 C63,60 66,57 66,51 C66,44 61,41 45,41 Z" />
+</vector>

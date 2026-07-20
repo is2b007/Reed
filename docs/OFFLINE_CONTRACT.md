@@ -1,11 +1,11 @@
-# Reed offline contract
+# Reed offline-first contract
 
-This is a product requirement, not a graceful-degradation mode. A released Reed build must be fully useful on a computer with no network connection.
+This is a product requirement, not a graceful-degradation mode. A released Reed build must be fully useful on a computer with no network connection. Optional GitHub collaboration and time-limited Android Remote Agent Access are user-controlled exceptions; both are disabled by default and never required for authoring, validation, backup, local MCP, CLI, playtest, or export.
 
 ## Process boundary
 
 ```text
-optional network                    offline Reed boundary
+optional network                    local Reed boundary
 
 External agent/CLI ── LLM endpoint
        │
@@ -19,9 +19,23 @@ Editor ────────────────────────�
                                                 │
                                                 ▼
                               Unity JSON / CSV / PDF / XLSX exports
+
+User action ── platform Git adapter ── Git remote
+              (desktop: bundled git/gh; Android: embedded JGit)
+              (only when the project has enabled collaboration)
+
+Claude cloud ── public Reed relay ── outbound Android foreground service
+                (memory only)        (only during a visible, expiring session)
+                                             │
+                                             ▼
+                                      Android ReedCore
 ```
 
 The external agent owns its credentials and LLM connection. No credential, LLM SDK, endpoint, or generation interface belongs in Reed.
+
+The optional Git adapter owns the Git transport. Desktop credentials stay in the operating-system credential store through `gh`. Android has no supported child-process Git runtime, so its JGit adapter may pass an optional HTTPS token decrypted from Android Keystore for the duration of the selected action. Reed never writes credentials into a project, database, Git configuration, export, or log. It does not contain a general-purpose HTTP client, poll a remote, or connect merely because the History workspace is open. Every remote action starts from a visible user control.
+
+Remote Agent Access is isolated to Android's `remote` transport module and a foreground service. It starts only after confirmation in a visible activity, is scoped to one project for at most 24 hours, has a persistent Disconnect notification, and exposes guarded MCP tools backed by Android ReedCore. Its public relay stores nothing on disk and must not log MCP bodies or capability URLs. Git, raw SQL, arbitrary files, shell execution, and model credentials are outside this boundary.
 
 ## Allowed runtime I/O
 
@@ -31,15 +45,17 @@ The external agent owns its credentials and LLM connection. No credential, LLM S
 - user-selected Unity project directories;
 - printers and local PDF generation;
 - operating-system clipboard, file picker, and notifications.
+- user-triggered Git transport for a project whose collaboration setting is enabled: `git`/`gh` child processes on desktop or the isolated JGit module on Android.
+- user-triggered, time-limited HTTPS traffic from the isolated Android Remote Agent foreground service to its configured Reed relay.
 
 ## Forbidden runtime I/O
 
-- HTTP, HTTPS, WebSocket, WebRTC, DNS, or other outbound network calls;
+- direct HTTP, HTTPS, WebSocket, WebRTC, DNS, or other outbound network clients in Reed runtime code outside the explicit platform Git and Android Remote Agent transport boundaries;
 - analytics, crash upload, telemetry, update checks, license checks, and remote feature flags;
 - cloud sync, remote backups, remote databases, or hosted authentication;
 - CDN fonts, icon sets, scripts, styles, images, schemas, or help content;
 - mandatory localhost web services when stdio or direct IPC can serve the same purpose;
-- embedded browsers pointed at online help or third-party pages.
+- embedded browsers pointed at online help or third-party pages. GitHub authentication may open the user's external browser after an explicit **Connect GitHub** action.
 
 ## Distribution requirements
 
@@ -47,6 +63,10 @@ The external agent owns its credentials and LLM connection. No credential, LLM S
 - Keep user data outside application bundles in a user-selected or documented local directory.
 - Backups and named versions are ordinary local files that can be copied without Reed.
 - Export ordering is deterministic so Git works without a Reed account or server.
+- Local Git support may initialize repositories, inspect status/history, create commits and branches, compare a branch with its local base, and edit the local `origin` configuration with no network.
+- The packaged Mac app should bundle a compatible `gh` executable. Reed may execute `git` or `gh` only after GitHub collaboration is enabled for the project and the user requests connection, repository creation/connection, fetch, push, pull-request creation, review, or merge.
+- GitHub status is checked only when the user asks. Do not add background synchronization, automatic fetch, automatic push, scheduled polling, token persistence, or a remote requirement for local save/history.
+- Android remote credentials, when a private HTTPS repository requires them, are encrypted with Android Keystore. Only the JGit boundary may decrypt them and only while handling the pressed Clone, Fetch, Pull, Push, or Sync action.
 - Release notes and documentation must be available locally.
 
 ## Verification gates
@@ -61,10 +81,16 @@ Before a release:
 6. Confirm external mutations hot-reload and stale `expectedVersion` writes fail safely.
 7. Create an automatic backup, a named version, and restore both.
 8. Export project JSON, Pixel Crushers JSON, screenplay PDF/Markdown, and voice CSV/XLSX.
-9. Inspect process traffic and fail the test if Reed attempts any network connection.
+9. Leave GitHub collaboration disabled; inspect process traffic and fail the test if Reed attempts any network connection.
 10. Verify there are no remote asset URLs in built HTML, CSS, JavaScript, or packaged configuration.
+11. Enable GitHub collaboration, open History, and verify no `git`/`gh` network process starts before an explicit action.
+12. Exercise GitHub operations with a fake `gh` executable and verify connection, repository, push, pull-request, review, and merge arguments without contacting a real remote.
+13. Build the Android APK, run its offline-boundary test, and exercise create/open/edit/restart with networking denied.
+14. Run Android Git integration against a local bare repository, then separately verify Clone, Fetch, fast-forward Pull, Checkpoint, and Push against a test remote only after pressing each action.
+15. Open the Android Agent workspace without enabling it and verify there is no network traffic or foreground service.
+16. Exercise the relay and Android MCP dispatcher with fixture credentials; verify invalid capabilities, disconnect, expiry, stale writes, Final guardrails, and the absence of Git tools.
 
-An automated integration test should deny network APIs at the process level and exercise the same vertical slice. Static checks are useful but cannot replace the process-level test.
+An automated integration test should deny network APIs at the process level and exercise the same vertical slice. Static checks are useful but cannot replace the process-level test. Separate integration coverage should substitute a fake GitHub CLI so the opt-in process boundary can be tested deterministically and without credentials.
 
 Run Reed's automated acceptance with:
 
@@ -72,4 +98,4 @@ Run Reed's automated acceptance with:
 CI=true pnpm test:offline
 ```
 
-The test injects a process-level guard that throws on HTTP, HTTPS, sockets, TLS, DNS, datagrams, fetch, and WebSocket; then creates a Unicode branching project, runs the built CLI and stdio MCP server, creates a backup, and produces project, Pixel Crushers, screenplay, PDF, CSV, and XLSX outputs. It also scans Reed-owned runtime source for network clients, telemetry/updaters, and remote asset references, and verifies the Electron request boundary covers HTTP(S) and WebSocket traffic. The packaged app separately cancels those protocols in Electron and ships its assets locally.
+The test injects a process-level guard that throws on HTTP, HTTPS, sockets, TLS, DNS, datagrams, fetch, and WebSocket; then creates a Unicode branching project, runs the built CLI and stdio MCP server, creates a backup, and produces project, Pixel Crushers, screenplay, PDF, CSV, and XLSX outputs. It also scans Reed-owned runtime source for direct network clients, telemetry/updaters, and remote asset references, and verifies the Electron request boundary covers HTTP(S) and WebSocket traffic. The packaged app separately cancels those protocols in Electron and ships its assets locally. GitHub integration tests replace `gh` with a local fixture and assert that disabled or merely opened GitHub UI does not execute it.

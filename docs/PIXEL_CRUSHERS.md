@@ -2,7 +2,7 @@
 
 ## Export
 
-Run `export-pixelcrushers` from the CLI/MCP or choose **Export for Unity** in the Production workspace. By default Reed writes a single database to `exports/pixel-crushers`. Partitioned mode emits one database per configured partition/scene scope.
+Run `export-pixelcrushers` from the CLI/MCP or choose **Single dialogue database** in the Export workspace. By default Reed writes a single database to `exports/pixel-crushers`. Partitioned mode emits one database per configured partition/scene scope.
 
 Each export contains actors, declared variables, conversations, entries, START entry `0`, conditions, scripts, sequences, canvas positions, groups, prioritized local/cross-conversation links, localized fields, and a custom `Line ID` field. The companion manifest maps `{LineID}.wav` to the Pixel Crushers entry tag. Descriptions are stamped `GENERATED — DO NOT HAND-EDIT`.
 

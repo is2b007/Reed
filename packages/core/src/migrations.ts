@@ -245,6 +245,13 @@ const migrations: Migration[] = [
       CREATE INDEX idx_reviews_project ON review_snapshots(project_id, mutation_sequence, created_at);
     `,
   },
+  {
+    version: 3,
+    name: "voice_pronunciation_notes",
+    sql: `
+      ALTER TABLE dialogue_nodes ADD COLUMN pronunciation TEXT NOT NULL DEFAULT '';
+    `,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

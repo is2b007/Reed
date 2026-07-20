@@ -33,6 +33,10 @@ export const VerificationStatusSchema = z.enum(["unverified", "native-verified"]
 export const SubtitleOverrideSchema = z.enum(["none", "forced"]);
 export const MutationSourceSchema = z.enum(["human", "agent", "system"]);
 export const VariableTypeSchema = z.enum(["boolean", "number", "text"]);
+export const PullRequestProviderSchema = z.enum(["disabled", "github"]);
+export const GitBranchNameSchema = z.string().trim().min(1).max(128)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/, "Branch names may contain letters, numbers, dots, underscores, hyphens, and slashes")
+  .refine((value) => !value.includes("..") && !value.includes("//") && !value.includes("@{") && !value.endsWith(".") && !value.endsWith("/") && !value.endsWith(".lock"), "Invalid Git branch name");
 
 export const CreateProjectInputSchema = z
   .object({
@@ -53,6 +57,26 @@ export const CreateProjectInputSchema = z
       ctx.addIssue({ code: "custom", path: ["languages"], message: "languages must be unique" });
     }
   });
+
+export const UpdateProjectInputFields = {
+  name: z.string().trim().min(1).max(120).optional(),
+  slug: z.string().trim().regex(/^[a-z0-9][a-z0-9-]{1,62}$/).optional(),
+  languages: z.array(LanguageCodeSchema).min(1).optional(),
+  defaultLanguage: LanguageCodeSchema.optional(),
+  pullRequestProvider: PullRequestProviderSchema.optional(),
+  pullRequestBaseBranch: GitBranchNameSchema.optional(),
+  expectedVersion: z.number().int().positive().optional(),
+  source: MutationSourceSchema.default("human"),
+} satisfies z.ZodRawShape;
+
+export const UpdateProjectInputSchema = z.object(UpdateProjectInputFields).superRefine((value, ctx) => {
+  if (value.languages && new Set(value.languages).size !== value.languages.length) {
+    ctx.addIssue({ code: "custom", path: ["languages"], message: "languages must be unique" });
+  }
+  if (value.languages && value.defaultLanguage && !value.languages.includes(value.defaultLanguage)) {
+    ctx.addIssue({ code: "custom", path: ["defaultLanguage"], message: "defaultLanguage must be included in languages" });
+  }
+});
 
 export const CreateLevelInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -192,6 +216,7 @@ export const UpdateNodeInputSchema = z.object({
   subtitleOverride: SubtitleOverrideSchema.optional(),
   contextComment: z.string().max(8_000).optional(),
   voiceComment: z.string().max(8_000).optional(),
+  pronunciation: z.string().max(8_000).optional(),
   contextPath: z.array(LineIdSchema).max(64).optional(),
   tags: z.array(z.string().trim().min(1).max(80)).max(100).optional(),
   isTerminal: z.boolean().optional(),
@@ -247,6 +272,7 @@ export const ImportConversationInputSchema = z.object({
 });
 
 export type CreateProjectInput = z.infer<typeof CreateProjectInputSchema>;
+export type UpdateProjectInput = z.infer<typeof UpdateProjectInputSchema>;
 export type CreateLevelInput = z.infer<typeof CreateLevelInputSchema>;
 export type CreateSceneInput = z.infer<typeof CreateSceneInputSchema>;
 export type UpdateSceneInput = z.infer<typeof UpdateSceneInputSchema>;
@@ -269,6 +295,7 @@ export type TextStatus = z.infer<typeof TextStatusSchema>;
 export type VoiceStatus = z.infer<typeof VoiceStatusSchema>;
 export type VerificationStatus = z.infer<typeof VerificationStatusSchema>;
 export type MutationSource = z.infer<typeof MutationSourceSchema>;
+export type PullRequestProvider = z.infer<typeof PullRequestProviderSchema>;
 
 export interface MutationRecord {
   sequence: number;

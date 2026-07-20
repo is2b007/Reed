@@ -1,0 +1,17 @@
+{
+  "name": "@reed/relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "reed-relay": "./dist/index.js"
+  },
+  "scripts": {
+    "start": "node --import tsx src/index.ts",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.5"
+  }
+}
