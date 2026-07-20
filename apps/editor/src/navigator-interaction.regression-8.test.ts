@@ -4,13 +4,19 @@ import { describe, expect, it } from "vitest";
 // Regression: desktop panel controls must produce a visible layout change and
 // tree disclosure affordances must be backed by real, keyboard-reachable controls.
 describe("project navigator interactions", () => {
-  it("connects navigator state to the desktop shell and keeps its toggle visible", async () => {
+  it("connects navigator state to the desktop shell without mixing panel controls into navigation", async () => {
     const source = await readFile(new URL("./app.tsx", import.meta.url), "utf8");
     const styles = await readFile(new URL("./styles.css", import.meta.url), "utf8");
 
     expect(source).toContain('navigatorOpen ? "navigator-open" : "navigator-closed"');
     expect(styles).toMatch(/@media\s*\(min-width:901px\)[\s\S]*\.app-shell\.navigator-closed/);
-    expect(styles).toMatch(/\.compact-panel-actions\s*\{[^}]*display:flex/);
+    expect(source).not.toContain('className="compact-panel-actions"');
+    expect(source).toContain('className="panel-restore project"');
+    expect(source).toContain('className="panel-restore panel-restore-inspector"');
+    expect(styles).toMatch(/\.panel-restore\s*\{/);
+    expect(styles).toContain(".panel-restore-inspector");
+    expect(styles).toContain(".app-shell.inspector-closed>aside.inspector");
+    expect(styles).not.toContain(".compact-panel-actions");
   });
 
   it("uses real disclosure buttons for levels and scenes", async () => {

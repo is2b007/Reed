@@ -1,0 +1,14 @@
+.git
+.gradle
+node_modules
+dist
+build
+out
+coverage
+apps/android
+apps/editor
+apps/mcp
+packages
+*.sqlite*
+*.apk
+*.aab

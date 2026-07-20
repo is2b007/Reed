@@ -2,6 +2,8 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
+import ExcelJS from "exceljs";
+import { PDFDocument } from "pdf-lib";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ConcurrencyError,
@@ -33,6 +35,29 @@ afterEach(() => {
 });
 
 describe("ReedProject", () => {
+  it("updates project settings through versioned history", async () => {
+    const { project } = await createProject();
+    const current = project.getProject();
+    const result = await project.updateProject({
+      name: "Το Πράσινο Λιμάνι",
+      slug: "green-harbour",
+      languages: ["el", "en", "it"],
+      defaultLanguage: "el",
+      expectedVersion: current.version,
+    });
+
+    expect(result.value).toMatchObject({
+      name: "Το Πράσινο Λιμάνι",
+      slug: "green-harbour",
+      languages: ["el", "en", "it"],
+      defaultLanguage: "el",
+      version: current.version + 1,
+    });
+    expect(project.getChanges()).toContainEqual(expect.objectContaining({ operation: "project.update", newVersion: current.version + 1 }));
+    await expect(project.updateProject({ name: "Stale", expectedVersion: current.version }))
+      .rejects.toMatchObject({ code: "STALE_VERSION" });
+  });
+
   it("allocates stable Line IDs and persistent numeric IDs", async () => {
     const { root, project } = await createProject();
     const level = (await project.createLevel({ name: "Chapter One" })).value;
@@ -47,11 +72,20 @@ describe("ReedProject", () => {
     expect(line.entryNumericId).toBe(1);
     expect(line.lineId).toMatch(/^old-harbour-[a-f0-9]{10}$/);
 
+    const deleted = (await project.addNode({ conversationId: first.id, text: "Temporary mapping." })).value;
+    expect(deleted.entryNumericId).toBe(2);
+    await project.deleteNode({ lineId: deleted.lineId, confirmation: deleted.lineId });
+    const ledger = JSON.parse(serializeProject(project)) as { allocations?: { entryNumericIds: Record<string, number> } };
+    expect(ledger.allocations?.entryNumericIds[first.id]).toBe(2);
+    const replacement = (await project.addNode({ conversationId: first.id, text: "A new permanent mapping." })).value;
+    expect(replacement.entryNumericId).toBe(3);
+
     const lineId = line.lineId;
     project.close();
     const reopened = await ReedProject.open(root);
     openProjects.push(reopened);
     expect(reopened.getConversation(first.id).nodes.find((node) => node.id === line.id)?.lineId).toBe(lineId);
+    expect(reopened.getConversation(first.id).nodes.find((node) => node.id === replacement.id)?.entryNumericId).toBe(3);
   });
 
   it("returns the mutation diff for stale writes across connections", async () => {
@@ -138,7 +172,7 @@ describe("ReedProject", () => {
     if (!start) throw new Error("missing start");
     const line = (await project.addNode({ conversationId: conversation.id, speakerCharacterId: character.id, text: "Welcome to the harbour.", isTerminal: true })).value;
     await project.setNodeText({ lineId: line.lineId, language: "el", text: "Καλώς ήρθες στο λιμάνι." });
-    await project.updateNode({ lineId: line.lineId, contextComment: "First meeting", voiceComment: "Warm, guarded", tags: ["arrival"], force: false });
+    await project.updateNode({ lineId: line.lineId, contextComment: "First meeting", pronunciation: "lee-MAH-nee", voiceComment: "Warm, guarded", tags: ["arrival"], force: false });
     await project.linkNodes({ originNodeId: start.id, destinationNodeId: line.id, priority: 0, force: false });
 
     const exported = await exportPixelCrushers(project);
@@ -150,11 +184,37 @@ describe("ReedProject", () => {
     expect(database.conversations[0]?.id).toBe(conversation.numericId);
     expect(database.conversations[0]?.dialogueEntries.find((entry) => entry.id === line.entryNumericId)?.fields)
       .toContainEqual(expect.objectContaining({ title: "el", value: "Καλώς ήρθες στο λιμάνι." }));
+    expect(database.conversations[0]?.dialogueEntries.find((entry) => entry.id === line.entryNumericId)?.fields)
+      .toContainEqual(expect.objectContaining({ title: "Pronunciation", value: "lee-MAH-nee" }));
 
     const voice = await exportVoicePackage(project, { language: "el" });
-    expect((await readFile(voice.pdfPath)).subarray(0, 4).toString()).toBe("%PDF");
+    const masterPdf = await readFile(voice.pdfPath);
+    expect(masterPdf.subarray(0, 4).toString()).toBe("%PDF");
+    expect((await PDFDocument.load(masterPdf)).getPageCount()).toBeGreaterThanOrEqual(2);
+    expect(voice.actorPdfPaths).toHaveLength(1);
+    expect((await PDFDocument.load(await readFile(voice.actorPdfPaths[0] ?? ""))).getPageCount()).toBe(1);
     expect((await readFile(voice.xlsxPath)).subarray(0, 2).toString()).toBe("PK");
-    expect(await readFile(voice.csvPath, "utf8")).toContain("Καλώς ήρθες στο λιμάνι.");
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(voice.xlsxPath);
+    expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual(["Session Summary", "Voice Lines"]);
+    expect(workbook.getWorksheet("Voice Lines")?.getCell("A2").value).toBe(line.lineId);
+    expect(workbook.getWorksheet("Voice Lines")?.getCell("H2").value).toBe("lee-MAH-nee");
+    expect(workbook.getWorksheet("Voice Lines")?.pageSetup.printArea).toContain("A1:I");
+    const csv = await readFile(voice.csvPath, "utf8");
+    expect(csv).toContain("Καλώς ήρθες στο λιμάνι.");
+    expect(csv).toContain("lee-MAH-nee");
+    expect(csv).toContain(`${line.lineId}.wav`);
+  });
+
+  it("does not substitute another language in an actor recording script", async () => {
+    const { project } = await createProject(["en", "el"]);
+    const conversation = await createConversation(project);
+    const line = (await project.addNode({ conversationId: conversation.id, text: "English only" })).value;
+
+    await expect(exportVoicePackage(project, { language: "el" })).rejects.toMatchObject({
+      code: "CONFLICT",
+      details: expect.objectContaining({ language: "el", lineIds: [line.lineId] }),
+    });
   });
 
   it("imports auto-laid-out agent graphs and records review baselines", async () => {

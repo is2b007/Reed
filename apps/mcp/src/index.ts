@@ -9,6 +9,7 @@ import {
   AddNodeInputSchema,
   CreateConversationInputSchema,
   CreateSceneInputSchema,
+  DeclareVariableInputSchema,
   DeleteNodeInputSchema,
   ImportConversationInputSchema,
   LinkNodesInputSchema,
@@ -17,6 +18,7 @@ import {
   UnlinkNodesInputSchema,
   UpdateConversationInputSchema,
   UpdateNodeInputSchema,
+  UpdateProjectInputFields,
   UpdateSceneInputSchema,
   UpsertCharacterInputSchema,
 } from "@reed/schema";
@@ -66,7 +68,9 @@ register("find_lines", "Search local dialogue text and filter by character, tag,
 register("get_validation_report", "Validate graph structure, localization, variables, cast, and database ID ranges.", z.object({}), () => validateProject(project));
 register("get_schema", "Return Reed's schema version and allowed production vocabulary.", z.object({}), () => getSchemaDescriptor());
 register("list_characters", "List the cast registry.", z.object({}), () => project.listCharacters());
+register("list_variables", "List declared Pixel Crushers condition variables and their initial values.", z.object({}), () => project.listVariables());
 
+register("update_project", "Update versioned project identity, languages, or offline pull-request handoff settings without changing permanent content IDs.", z.object(UpdateProjectInputFields), (args) => project.updateProject({ ...args, source: "agent" }));
 register("create_scene", "Create a scene. Agent-created data is recorded as agent-sourced.", CreateSceneInputSchema, (args) => project.createScene({ ...args, source: "agent" }));
 register("update_scene", "Update a scene name, local beat reference, or display order without changing its permanent Line ID prefix.", UpdateSceneInputSchema, (args) => project.updateScene({ ...args, source: "agent" }));
 register("create_conversation", "Create a conversation with a permanent numeric ID and START node.", CreateConversationInputSchema, (args) => project.createConversation({ ...args, source: "agent" }));
@@ -90,12 +94,13 @@ register("set_node_sequence", "Set a node's Pixel Crushers sequence commands.", 
 register("add_tags", "Replace a node's searchable production tags.", z.object({ lineId: z.string(), tags: z.array(z.string()), expectedVersion: z.number().int().positive().optional(), force: z.boolean().default(false) }), (args) => project.updateNode({ ...args, source: "agent" }));
 register("set_line_status", "Set an agent-authored line up to Polished. Edited and Final are human-only.", SetLineStatusInputSchema, (args) => project.setLineStatus({ ...args, source: "agent" }));
 register("upsert_character", "Create or update a cast entry with a persistent actor ID.", UpsertCharacterInputSchema, (args) => project.upsertCharacter({ ...args, source: "agent" }));
+register("declare_variable", "Create or update a typed condition variable with a persistent numeric ID.", DeclareVariableInputSchema, (args) => project.declareVariable({ ...args, source: "agent" }));
 register("import_conversation_json", "Bulk-create and deterministically auto-layout a complete conversation graph.", ImportConversationInputSchema, (args) => project.importConversation({ ...args, source: "agent" }));
 register("export_pixelcrushers", "Validate and export local Pixel Crushers DialogueDatabase JSON.", z.object({
   mode: z.enum(["single", "partitioned"]).default("single"), outputDirectory: z.string().optional(), allowInvalid: z.boolean().default(false),
 }), (args) => exportPixelCrushers(project, args));
 register("export_voice", "Export local voice-actor PDF and studio CSV/XLSX files.", z.object({
-  outputDirectory: z.string().optional(), language: z.string().optional(), characterIds: z.array(z.string().uuid()).optional(), voiceStatuses: z.array(z.string()).optional(),
+  outputDirectory: z.string().optional(), language: z.string().optional(), characterIds: z.array(z.string().uuid()).optional(), voiceStatuses: z.array(z.string()).optional(), lineStatuses: z.array(z.string()).optional(),
 }), (args) => exportVoicePackage(project, args));
 
 server.registerResource("project-schema", "reed://schema", { title: "Reed schema", mimeType: "application/json" }, async (uri) => ({

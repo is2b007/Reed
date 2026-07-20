@@ -1,21 +1,24 @@
 # Reed
 
-Reed is a completely offline branching-dialogue workstation for Unity projects using Pixel Crushers Dialogue System. It combines a visual Electron editor, a local stdio MCP server for external agents, a scriptable CLI, and one shared SQLite/WAL core.
+Reed is an offline-first branching-dialogue workstation for Unity projects using Pixel Crushers Dialogue System. It combines a visual Electron editor for macOS, a native Android tablet editor, a local stdio MCP server for external agents, a scriptable CLI, and platform SQLite/WAL core implementations that share one deterministic project contract.
 
-The application has no accounts, login, telemetry, updater, cloud storage, hosted service, remote asset, or embedded LLM client. An external agent may contact its own configured model endpoint, then call Reed locally through MCP or the CLI; Reed itself never makes a network request.
+The application is fully useful without a network connection and has no Reed account, telemetry, updater, cloud project storage, remote asset, or embedded LLM client. An external agent may contact its own configured model endpoint, then call Reed locally through MCP or the CLI. Optional GitHub collaboration is disabled per project until a user turns it on; even then, Reed connects only when the user presses a GitHub action. Android also has explicit, expiring Remote Agent Access for Claude mobile through a separately deployed transient relay.
 
 ## What is included
 
 - Dense React Flow graph editing with line, choice, group, and cross-conversation links; any two configured languages side by side; per-line spoken-language selection; permanent Line IDs; protected Final content; and text-only playtest.
-- Project navigator, beat map, cast and variable registries, global local search, translation coverage, validation dashboard, review snapshots, read view, voice budget, and hot reload of CLI/MCP mutations.
-- SQLite WAL storage, migrations, optimistic concurrency, append-only mutation history, rolling and named backups, exact-confirmation restore/delete operations, and deterministic project JSON.
+- Native Mac menus, persisted Dark/Light/Automatic appearance, an in-app project home with recent local projects, versioned project settings, project navigator, beat map, cast and variable registries, global local search, translation coverage, validation dashboard, review snapshots, read view, voice budget, and hot reload of CLI/MCP mutations.
+- SQLite WAL storage, migrations, optimistic concurrency, append-only mutation history, autosave with a visible save state, rolling and named backups, exact-confirmation restore/delete operations, and deterministic project JSON.
+- Optional offline Git checkpoints and local story branches for team review. Pressing **Saved** opens the local-history and GitHub sync center for setup, connection status, repository connection, fetch, and push; the full opt-in GitHub workspace adds repository creation, branches, pull-request creation, review, and merge—without requiring Terminal. Reed stores no GitHub token and performs no background synchronization.
 - Pixel Crushers single- or multi-database JSON with stable actor, variable, conversation, and entry IDs; persisted Base ID ranges; localized fields; cross-database links; canvas positions; Lua/Sequence fields; and Line-ID audio manifest.
 - Unicode actor PDF, editable studio CSV/XLSX, screenplay Markdown, and word/minute budget exports for English, Greek, Italian, German, and Griko.
 - MCP tools and CLI commands backed exclusively by `@reed/core`, with agent status limits and stale-write protection.
+- A native Kotlin/Compose Android workspace for the Daylight DC-1 with a grayscale-safe adaptive layout, hardware keyboard/mouse/trackpad controls, Android 13 compatibility, and explicit HTTPS Git clone/checkpoint/fetch/pull/push backed by Android Keystore.
+- An opt-in Android foreground MCP bridge for Claude mobile, with a persistent Disconnect notification, encrypted connector capability, guarded ReedCore tools, no Git exposure, and an in-memory self-hostable relay.
 
 ## Install and verify
 
-Reed currently targets Node 22+ and pnpm 11. Dependency installation is the development/build step that may use a network. Once built, the app, data, backups, MCP, CLI, and exports run offline.
+Reed currently targets Node 22+ and pnpm 11. Dependency installation is the development/build step that may use a network. Once built, the app, data, backups, MCP, CLI, and exports run offline. GitHub features remain optional and require a connection only for the action the user requests.
 
 ### Download the Mac app
 
@@ -42,7 +45,17 @@ Build the local macOS application bundle:
 CI=true pnpm --filter @reed/editor package
 ```
 
-The locally signed development app is written to `apps/editor/out/Reed-darwin-arm64/Reed.app`. Apple Developer signing and notarization require the distributor's certificate and credentials.
+The locally signed development app is written to `apps/editor/out/Reed-darwin-arm64/Reed.app`. The Mac package bundles the GitHub CLI when it is available on the build machine, so users do not need to install or run command-line tools. Apple Developer signing and notarization require the distributor's certificate and credentials.
+
+Build the Android debug APK after installing Android SDK API 36 and accepting Google's Android SDK license terms:
+
+```sh
+pnpm android:test
+pnpm android:lint
+pnpm android:build
+```
+
+The APK is written to `apps/android/app/build/outputs/apk/debug/app-debug.apk`; the current verified DC-1 debug build is also available locally at `dist/Reed-Android-DC1-debug.apk`. See [Android and Daylight DC-1 setup](docs/ANDROID_DC1.md) for install, input, pen hover, offline, Git, checksum, and device-verification instructions.
 
 ## Start using Reed
 
@@ -81,7 +94,7 @@ my-story/
   exports/
     reed-project.json deterministic Git-readable snapshot
     pixel-crushers/   Unity JSON and audio manifests
-    voice/            PDF, CSV, and XLSX handoff files
+    voice/            Studio PDF, per-actor PDFs, XLSX tracker, and CSV
     screenplay.md
 ```
 
@@ -95,11 +108,16 @@ Unity JSON is one-way generated output and is stamped `GENERATED — DO NOT HAND
 - [MCP setup for humans](docs/MCP_SETUP.md)
 - [MCP operating playbook for AI agents](docs/AI_MCP_PLAYBOOK.md)
 - [Pixel Crushers export and Unity import](docs/PIXEL_CRUSHERS.md)
+- [Local history and optional GitHub collaboration](docs/PROJECT_HISTORY.md)
+- [Voice production handoff](docs/VOICE_PRODUCTION.md)
 - [Offline contract and release acceptance](docs/OFFLINE_CONTRACT.md)
 - [Architecture and completion plan](docs/BUILD_PLAN.md)
 - [Editor design rationale](docs/EDITOR_DESIGN.md)
 - [Visual research](docs/VISUAL_REFERENCES.md)
 - [Product design system](DESIGN.md)
+- [Android and Daylight DC-1 setup](docs/ANDROID_DC1.md)
+- [Android architecture and parity contract](docs/ANDROID_ARCHITECTURE.md)
+- [Remote MCP from Claude Android](docs/REMOTE_MCP_ANDROID.md)
 
 ## Compatibility boundary
 

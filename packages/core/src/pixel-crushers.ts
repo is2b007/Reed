@@ -46,6 +46,7 @@ function nodeFields(node: DialogueNodeRecord, languages: string[], defaultLangua
     field("Subtitle Override", node.subtitleOverride),
     field("Context Comment", node.contextComment),
     field("Voice Comment", node.voiceComment),
+    field("Pronunciation", node.pronunciation),
     field("Line Status", node.lineStatus),
     field("Voice Status", node.voiceStatus),
     field("Tags", node.tags.join(",")),

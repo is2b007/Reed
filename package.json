@@ -1,6 +1,6 @@
 {
   "name": "reed",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.8.0",
@@ -9,10 +9,15 @@
   },
   "scripts": {
     "build": "pnpm -r --if-present build",
-    "build:runtime": "pnpm --filter @reed/schema build && pnpm --filter @reed/core build && pnpm --filter @reed/cli build && pnpm --filter @reed/mcp build",
+    "build:runtime": "pnpm --filter @reed/schema build && pnpm --filter @reed/core build && pnpm --filter @reed/cli build && pnpm --filter @reed/mcp build && pnpm --filter @reed/relay build",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "vitest run",
     "test:offline": "pnpm build:runtime && node scripts/offline-smoke.mjs",
+    "android:build": "cd apps/android && ./gradlew assembleDebug",
+    "android:test": "cd apps/android && ./gradlew testDebugUnitTest",
+    "android:lint": "cd apps/android && ./gradlew lintDebug",
+    "relay:deploy:aws": "./scripts/deploy-relay-lightsail.sh",
+    "relay:verify": "node scripts/verify-relay.mjs",
     "test:watch": "vitest",
     "reed": "node --import tsx packages/cli/src/index.ts"
   },

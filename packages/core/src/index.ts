@@ -5,5 +5,6 @@ export * from "./models.js";
 export * from "./paths.js";
 export * from "./pixel-crushers.js";
 export * from "./project.js";
+export * from "./project-git.js";
 export * from "./production.js";
 export * from "./validation.js";

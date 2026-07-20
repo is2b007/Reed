@@ -6,12 +6,18 @@ import { Argument, Command, Option } from "commander";
 import {
   ReedError,
   ReedProject,
+  checkpointProjectGit,
+  createProjectGitBranch,
+  createProjectPullRequestHandoff,
   exportProjectJson,
   exportPixelCrushers,
   exportScreenplay,
   exportVoicePackage,
   getVoiceBudget,
   getSchemaDescriptor,
+  initializeProjectGit,
+  inspectProjectGit,
+  setProjectGitRemote,
   validateProject,
   type MutationSource,
 } from "@reed/core";
@@ -72,6 +78,25 @@ program.command("init")
       defaultLanguage: options.defaultLanguage,
     });
     try { print({ project: project.getProject(), paths: project.paths }, command); } finally { project.close(); }
+  });
+
+program.command("update-project")
+  .description("update versioned project identity and language settings")
+  .option("--name <name>", "project name")
+  .option("--slug <slug>", "stable project slug")
+  .option("--languages <codes>", "comma-separated language codes")
+  .option("--default-language <code>", "default writing language")
+  .addOption(new Option("--pull-requests <provider>", "pull request workflow").choices(["disabled", "github"]))
+  .option("--pr-base <branch>", "pull request base branch")
+  .option("--expected-version <number>", "project version", integer)
+  .action(async (options: { name?: string; slug?: string; languages?: string; defaultLanguage?: string; pullRequests?: "disabled" | "github"; prBase?: string; expectedVersion?: number }, command: Command) => {
+    if (!options.name && !options.slug && !options.languages && !options.defaultLanguage && !options.pullRequests && !options.prBase) throw new Error("Provide at least one project setting to update");
+    print(await useProject(command, (project) => project.updateProject({
+      name: options.name, slug: options.slug,
+      languages: options.languages?.split(",").map((value) => value.trim()).filter(Boolean),
+      defaultLanguage: options.defaultLanguage, pullRequestProvider: options.pullRequests, pullRequestBaseBranch: options.prBase,
+      expectedVersion: options.expectedVersion, source: globals(command).source,
+    })), command);
   });
 
 program.command("add-level")
@@ -196,6 +221,7 @@ program.command("update-node")
   .option("--script <lua>")
   .option("--context <text>")
   .option("--voice-comment <text>")
+  .option("--pronunciation <text>")
   .option("--tags <tags>", "comma-separated tags")
   .option("--terminal <value>", "true or false")
   .option("--x <number>", "canvas x", Number)
@@ -208,6 +234,7 @@ program.command("update-node")
       spokenLanguage: options.language as string | undefined, sequence: options.sequence as string | undefined,
       conditions: options.conditions as string | undefined, userScript: options.script as string | undefined,
       contextComment: options.context as string | undefined, voiceComment: options.voiceComment as string | undefined,
+      pronunciation: options.pronunciation as string | undefined,
       tags: typeof options.tags === "string" ? options.tags.split(",").map((tag) => tag.trim()).filter(Boolean) : undefined,
       isTerminal: typeof options.terminal === "string" ? options.terminal === "true" : undefined,
       x: options.x as number | undefined, y: options.y as number | undefined,
@@ -286,8 +313,8 @@ program.command("upsert-character")
   .action(async (name: string, options: Record<string, unknown>, command: Command) => {
     print(await useProject(command, (project) => project.upsertCharacter({
       id: options.id as string | undefined, name, displayNames: {}, isPlayer: Boolean(options.player),
-      portraitPath: options.portrait as string | undefined ?? null, description: String(options.description),
-      actorNotes: String(options.actorNotes), voiceNotes: String(options.voiceNotes),
+      portraitPath: options.portrait as string | undefined ?? null, description: String(options.description ?? ""),
+      actorNotes: String(options.actorNotes ?? ""), voiceNotes: String(options.voiceNotes ?? ""),
       expectedVersion: options.expectedVersion as number | undefined, source: globals(command).source,
     })), command);
   });
@@ -310,6 +337,10 @@ program.command("list-scenes").description("list scenes").action(async (_options
 
 program.command("list-characters").description("list characters").action(async (_options: unknown, command: Command) => {
   print(await useProject(command, (project) => project.listCharacters()), command);
+});
+
+program.command("list-variables").description("list typed dialogue variables and their initial values").action(async (_options: unknown, command: Command) => {
+  print(await useProject(command, (project) => project.listVariables()), command);
 });
 
 program.command("list-partitions").description("list stable database ID ranges").action(async (_options: unknown, command: Command) => {
@@ -338,6 +369,47 @@ program.command("validate").description("validate graph, localization, variable,
 
 program.command("backup").description("create a named local SQLite snapshot").argument("[label]", "snapshot label", "manual")
   .action(async (label: string, _options: unknown, command: Command) => print(await useProject(command, (project) => project.createBackup("named", label)), command));
+
+program.command("git-status").description("inspect offline local Git history without contacting a remote")
+  .action(async (_options: unknown, command: Command) => print(await useProject(command, (project) => inspectProjectGit(project.paths.root)), command));
+
+program.command("git-init").description("initialize offline local Git history and create the first story checkpoint")
+  .action(async (_options: unknown, command: Command) => print(await useProject(command, async (project) => {
+    await exportProjectJson(project);
+    await initializeProjectGit(project.paths.root);
+    return checkpointProjectGit(project.paths.root, "Initial Reed story");
+  }), command));
+
+program.command("git-checkpoint").description("export current story JSON and create an offline local Git checkpoint").argument("<message>")
+  .action(async (message: string, _options: unknown, command: Command) => print(await useProject(command, async (project) => {
+    await exportProjectJson(project);
+    return checkpointProjectGit(project.paths.root, message);
+  }), command));
+
+program.command("git-branch").description("create an offline local story branch from a clean checkpoint").argument("<name>")
+  .action(async (name: string, _options: unknown, command: Command) => print(await useProject(command, async (project) => {
+    await exportProjectJson(project);
+    return createProjectGitBranch(project.paths.root, name);
+  }), command));
+
+program.command("git-pr-handoff").description("prepare copyable GitHub CLI PR commands without making network requests")
+  .requiredOption("--title <title>", "pull request title")
+  .option("--body <body>", "pull request review notes", "")
+  .option("--base <branch>", "base branch; defaults to project settings")
+  .option("--number <number>", "existing pull request number for view and merge commands", integer)
+  .action(async (options: { title: string; body: string; base?: string; number?: number }, command: Command) => print(await useProject(command, async (project) => {
+    await exportProjectJson(project);
+    return createProjectPullRequestHandoff(project.paths.root, {
+      baseBranch: options.base ?? project.getProject().pullRequestBaseBranch,
+      title: options.title, body: options.body, pullRequestNumber: options.number,
+    });
+  }), command));
+
+program.command("git-set-remote").description("store or remove an origin URL locally without connecting to it").argument("[url]").option("--remove", "remove the configured origin", false)
+  .action(async (url: string | undefined, options: { remove: boolean }, command: Command) => {
+    if (!options.remove && !url) throw new Error("Provide a remote URL or use --remove");
+    print(await useProject(command, (project) => setProjectGitRemote(project.paths.root, options.remove ? null : url ?? null)), command);
+  });
 
 program.command("restore")
   .description("restore a local snapshot after exact backup ID confirmation")
@@ -368,10 +440,11 @@ program.command("export-voice")
   .option("--language <code>")
   .option("--character <ids>", "comma-separated character IDs")
   .option("--status <statuses>", "comma-separated voice statuses")
+  .option("--line-status <statuses>", "comma-separated text statuses")
   .option("-o, --output <directory>")
-  .action(async (options: { language?: string; character?: string; status?: string; output?: string }, command: Command) => {
+  .action(async (options: { language?: string; character?: string; status?: string; lineStatus?: string; output?: string }, command: Command) => {
     print(await useProject(command, (project) => exportVoicePackage(project, {
-      language: options.language, characterIds: options.character?.split(","), voiceStatuses: options.status?.split(","), outputDirectory: options.output,
+      language: options.language, characterIds: options.character?.split(","), voiceStatuses: options.status?.split(","), lineStatuses: options.lineStatus?.split(","), outputDirectory: options.output,
     })), command);
   });
 

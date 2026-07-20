@@ -27,6 +27,14 @@ exports/
 .vscode/
 *.swp
 
+# Android local toolchain and build state
+apps/android/.gradle/
+apps/android/local.properties
+apps/android/**/build/
+*.apk
+*.aab
+captures/
+
 # test artifacts
 playwright-report/
 test-results/

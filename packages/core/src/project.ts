@@ -21,6 +21,7 @@ import {
   UnlinkNodesInputSchema,
   UpdateConversationInputSchema,
   UpdateNodeInputSchema,
+  UpdateProjectInputSchema,
   UpdateSceneInputSchema,
   UpsertCharacterInputSchema,
   type AddNodeInput,
@@ -42,6 +43,7 @@ import {
   type UnlinkNodesInput,
   type UpdateConversationInput,
   type UpdateNodeInput,
+  type UpdateProjectInput,
   type UpdateSceneInput,
 } from "@reed/schema";
 import { ConflictError, ConcurrencyError, GuardrailError, NotFoundError } from "./errors.js";
@@ -91,7 +93,24 @@ function safeFilePart(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "snapshot";
 }
 
-function mapProject(row: Row): ProjectRecord {
+function literalFtsQuery(value: string): string | null {
+  const tokens = value.trim().split(/\s+/u).filter((token) => /[\p{L}\p{N}]/u.test(token));
+  return tokens.length ? tokens.map((token) => `"${token.replace(/"/g, '""')}"`).join(" AND ") : null;
+}
+
+function likePattern(value: string): string {
+  return `%${value.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
+}
+
+function settingValue<T>(settings: Map<string, unknown>, key: string, fallback: T): T {
+  const raw = settings.get(key);
+  if (raw === undefined) return fallback;
+  try { return JSON.parse(String(raw)) as T; } catch { return fallback; }
+}
+
+function mapProject(row: Row, settings = new Map<string, unknown>()): ProjectRecord {
+  const provider = settingValue<unknown>(settings, "pull_request_provider", "disabled");
+  const baseBranch = settingValue<unknown>(settings, "pull_request_base_branch", "main");
   return {
     id: String(row.id),
     name: String(row.name),
@@ -99,6 +118,8 @@ function mapProject(row: Row): ProjectRecord {
     schemaVersion: Number(row.schema_version),
     languages: parseJson<string[]>(row.languages_json),
     defaultLanguage: String(row.default_language),
+    pullRequestProvider: provider === "github" ? "github" : "disabled",
+    pullRequestBaseBranch: typeof baseBranch === "string" ? baseBranch : "main",
     version: Number(row.version),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
@@ -147,7 +168,7 @@ function mapNode(row: Row, texts: NodeTextRecord[]): DialogueNodeRecord {
     listenerCharacterId: row.listener_character_id ? String(row.listener_character_id) : null,
     spokenLanguage: String(row.spoken_language), sequence: String(row.sequence), conditions: String(row.conditions),
     userScript: String(row.user_script), subtitleOverride: String(row.subtitle_override) as DialogueNodeRecord["subtitleOverride"],
-    contextComment: String(row.context_comment), voiceComment: String(row.voice_comment),
+    contextComment: String(row.context_comment), voiceComment: String(row.voice_comment), pronunciation: String(row.pronunciation),
     contextPath: parseJson<string[]>(row.context_path_json),
     lineStatus: String(row.line_status) as DialogueNodeRecord["lineStatus"],
     voiceStatus: String(row.voice_status) as DialogueNodeRecord["voiceStatus"],
@@ -227,7 +248,38 @@ export class ReedProject {
   getProject(): ProjectRecord {
     const row = this.db.prepare("SELECT * FROM projects LIMIT 1").get() as Row | undefined;
     if (!row) throw new NotFoundError("Project", this.paths.root);
-    return mapProject(row);
+    const settings = new Map((this.db.prepare("SELECT key, value_json FROM project_settings WHERE project_id = ?").all(String(row.id)) as Row[])
+      .map((setting) => [String(setting.key), setting.value_json]));
+    return mapProject(row, settings);
+  }
+
+  async updateProject(rawInput: UpdateProjectInput): Promise<MutationResult<ProjectRecord>> {
+    const input = UpdateProjectInputSchema.parse(rawInput);
+    await this.ensureRollingBackup();
+    const project = this.getProject();
+    this.assertVersion("project", project.id, input.expectedVersion, project.version);
+    const next = {
+      name: input.name ?? project.name,
+      slug: input.slug ?? project.slug,
+      languages: input.languages ?? project.languages,
+      defaultLanguage: input.defaultLanguage ?? project.defaultLanguage,
+      pullRequestProvider: input.pullRequestProvider ?? project.pullRequestProvider,
+      pullRequestBaseBranch: input.pullRequestBaseBranch ?? project.pullRequestBaseBranch,
+    };
+    if (!next.languages.includes(next.defaultLanguage)) {
+      throw new ConflictError("Default language must be enabled for this project", { defaultLanguage: next.defaultLanguage, languages: next.languages });
+    }
+    const result = this.db.transaction(() => {
+      this.db.prepare("UPDATE projects SET name = ?, slug = ?, languages_json = ?, default_language = ? WHERE id = ?")
+        .run(next.name, next.slug, JSON.stringify(next.languages), next.defaultLanguage, project.id);
+      const saveSetting = this.db.prepare(`INSERT INTO project_settings(project_id, key, value_json, updated_at)
+        VALUES (?, ?, ?, ?) ON CONFLICT(project_id, key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`);
+      const timestamp = now();
+      saveSetting.run(project.id, "pull_request_provider", JSON.stringify(next.pullRequestProvider), timestamp);
+      saveSetting.run(project.id, "pull_request_base_branch", JSON.stringify(next.pullRequestBaseBranch), timestamp);
+      return this.commitProjectMutation(project, "project.update", input.source, next, input.expectedVersion);
+    }).immediate();
+    return { value: this.getProject(), ...result };
   }
 
   listLevels(): LevelRecord[] {
@@ -306,28 +358,22 @@ export class ReedProject {
   }
 
   find(query: string, limit = 50): SearchResult[] {
-    const rows = this.db.prepare(`SELECT ls.line_id, ls.language_code, ls.dialogue_text, ls.menu_text,
-      c.id AS conversation_id, c.title AS conversation_title, s.id AS scene_id, s.name AS scene_name,
-      dn.speaker_character_id, dn.line_status, dn.voice_status, dn.tags_json
-      FROM line_search ls
-      JOIN dialogue_nodes dn ON dn.line_id = ls.line_id
-      JOIN conversations c ON c.id = dn.conversation_id
-      JOIN scenes s ON s.id = c.scene_id
-      WHERE line_search MATCH ? ORDER BY rank, ls.line_id, ls.language_code LIMIT ?`).all(query, limit) as Row[];
-    return rows.map((row) => ({
-      lineId: String(row.line_id), language: String(row.language_code), text: String(row.dialogue_text),
-      menuText: row.menu_text === null ? null : String(row.menu_text), conversationId: String(row.conversation_id),
-      conversationTitle: String(row.conversation_title), sceneId: String(row.scene_id), sceneName: String(row.scene_name),
-      speakerCharacterId: row.speaker_character_id ? String(row.speaker_character_id) : null,
-      lineStatus: String(row.line_status) as SearchResult["lineStatus"], voiceStatus: String(row.voice_status) as SearchResult["voiceStatus"],
-      tags: parseJson<string[]>(row.tags_json),
-    }));
+    return this.findLines({ query, limit });
   }
 
   findLines(filters: { query?: string; characterId?: string; tag?: string; status?: string; language?: string; missingLanguage?: string; limit?: number }): SearchResult[] {
     const clauses: string[] = [];
     const values: unknown[] = [];
-    if (filters.query) { clauses.push("line_search MATCH ?"); values.push(filters.query); }
+    if (filters.query?.trim()) {
+      const query = filters.query.trim();
+      const searchClauses: string[] = [];
+      const ftsQuery = literalFtsQuery(query);
+      if (ftsQuery) { searchClauses.push("ls.rowid IN (SELECT rowid FROM line_search WHERE line_search MATCH ?)"); values.push(ftsQuery); }
+      const pattern = likePattern(query);
+      searchClauses.push("ls.line_id LIKE ? ESCAPE '\\'"); values.push(pattern);
+      searchClauses.push("EXISTS (SELECT 1 FROM json_each(dn.tags_json) WHERE CAST(value AS TEXT) LIKE ? ESCAPE '\\')"); values.push(pattern);
+      clauses.push(`(${searchClauses.join(" OR ")})`);
+    }
     if (filters.characterId) { clauses.push("dn.speaker_character_id = ?"); values.push(filters.characterId); }
     if (filters.tag) { clauses.push("EXISTS (SELECT 1 FROM json_each(dn.tags_json) WHERE value = ?)"); values.push(filters.tag); }
     if (filters.status) { clauses.push("(dn.line_status = ? OR dn.voice_status = ?)"); values.push(filters.status, filters.status); }
@@ -511,13 +557,7 @@ export class ReedProject {
     const timestamp = now();
     const spokenLanguage = input.spokenLanguage ?? project.defaultLanguage;
     const result = this.db.transaction(() => {
-      const liveMaximum = Number((this.db.prepare("SELECT COALESCE(MAX(entry_numeric_id), 0) AS value FROM dialogue_nodes WHERE conversation_id = ?").get(conversation.id) as Row).value);
-      const issuedMaximum = (this.db.prepare(`SELECT changes_json FROM mutation_log
-        WHERE aggregate_type = 'conversation' AND aggregate_id = ? AND operation IN ('node.create', 'node.delete')`).all(conversation.id) as Row[])
-        .reduce((maximum, row) => {
-          const issued = Number(parseJson<{ entryNumericId?: number }>(row.changes_json).entryNumericId ?? 0);
-          return Math.max(maximum, issued);
-        }, liveMaximum);
+      const issuedMaximum = this.getIssuedEntryNumericId(conversation.id);
       const entryNumericId = issuedMaximum + 1;
       this.db.prepare(`INSERT INTO dialogue_nodes
         (id, conversation_id, line_id, entry_numeric_id, kind, speaker_character_id, listener_character_id,
@@ -535,6 +575,19 @@ export class ReedProject {
       return this.commitConversationMutation(conversation, "node.create", input.source, { id, lineId, entryNumericId, kind: input.kind }, input.expectedVersion);
     }).immediate();
     return { value: this.getNodeByLineId(lineId), ...result };
+  }
+
+  getIssuedEntryNumericId(conversationId: string): number {
+    this.requireConversation(conversationId);
+    const liveMaximum = Number((this.db.prepare(
+      "SELECT COALESCE(MAX(entry_numeric_id), 0) AS value FROM dialogue_nodes WHERE conversation_id = ?",
+    ).get(conversationId) as Row).value);
+    return (this.db.prepare(`SELECT changes_json FROM mutation_log
+      WHERE aggregate_type = 'conversation' AND aggregate_id = ? AND operation IN ('node.create', 'node.delete')`).all(conversationId) as Row[])
+      .reduce((maximum, row) => {
+        const issued = Number(parseJson<{ entryNumericId?: number }>(row.changes_json).entryNumericId ?? 0);
+        return Math.max(maximum, issued);
+      }, liveMaximum);
   }
 
   async linkNodes(rawInput: LinkNodesInput): Promise<MutationResult<DialogueLinkRecord>> {
@@ -610,6 +663,7 @@ export class ReedProject {
       subtitle_override: input.subtitleOverride,
       context_comment: input.contextComment,
       voice_comment: input.voiceComment,
+      pronunciation: input.pronunciation,
       context_path_json: input.contextPath ? JSON.stringify(input.contextPath) : undefined,
       tags_json: input.tags ? JSON.stringify([...new Set(input.tags)].sort()) : undefined,
       is_terminal: input.isTerminal === undefined ? undefined : input.isTerminal ? 1 : 0,

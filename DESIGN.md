@@ -107,6 +107,19 @@ Use ease-out for entry and ease-in for exit. Respect reduced motion. Never anima
 
 ## Workspace behavior
 
+### Android tablet / Daylight DC-1
+
+The Android shell is an adaptation of the studio workspace, not a separate mobile visual language. At 1200×1600 it defaults to landscape with a compact command bar, a 216–264dp navigator, the active workspace, and a 300–360dp inspector. Portrait and split-screen collapse the inspector before the navigator and expose the same destinations through a labelled navigation rail or drawer.
+
+- Use opaque, high-contrast surfaces and one-pixel borders; avoid blur, gradients, low-opacity overlays, and decorative animation so the grayscale LivePaper display remains crisp.
+- Touch targets are at least 44dp, while keyboard/mouse density stays compact inside the target. Hover, focus, selected, and pressed states must all be visibly distinct.
+- Every action has a keyboard path. Tab and arrow-key traversal, Escape, Enter, Delete, Ctrl/Command+K, Ctrl/Command+S, and Ctrl/Command+Shift+P are part of the acceptance suite.
+- Mouse wheels and two-finger trackpad gestures pan the graph; Ctrl/Command+wheel zooms. Dragging nodes must update at pointer rate and persist once on release.
+- Wacom EMR hover is a first-class pointer state: proximity reveals the node target and a 44dp connection-port hit area without selecting it. Pen-barrel actions mirror pointer selection/context actions, eraser hover is labelled, and hover never reflows a node.
+- Android uses bundled assets and system font fallbacks that cover English, Greek, Griko, Italian, and German. It never downloads fonts or icons.
+- Git is a visibly optional workspace. Local editing and project opening never wait on a remote; fetch, pull, clone, and push are only initiated by labelled user actions.
+- Remote Agent Access is a visibly optional workspace. Its active project, connection state, expiry, last request, and persistent Android notification remain explicit; disabling it is always one action away. Connector capability URLs are labelled as secrets and never hidden behind an ambiguous save indicator.
+
 ### Translation
 
 Use three functional zones: a filterable line/key list, a dual-language source/target editor, and contextual QA/metadata. For broad coverage work, switch the center to a spreadsheet-like language grid. Keep frozen Line ID and speaker columns.
@@ -137,7 +150,7 @@ Lead with a severity-filtered issue list, not generic metric cards. Selecting an
 - no oversized rounded cards or pill buttons everywhere;
 - no modal inspector for routine node editing;
 - no hidden save state, backup state, validation state, or external-change state;
-- no remote fonts, icons, assets, help, telemetry, or network-dependent UI.
+- no remote fonts, icons, assets, help, telemetry, or network-dependent core UI. Optional GitHub and Remote Agent Access controls must be clearly disabled by default, remain idle until a user action, and degrade without blocking local work.
 
 ## Decisions log
 
@@ -147,3 +160,6 @@ Lead with a severity-filtered issue list, not generic metric cards. Selecting an
 | 2026-07-15 | Dark olive primary theme | Creates a distinct but restrained identity adjacent to Unity-style tooling. |
 | 2026-07-15 | Stable studio shell with task workspaces | Preserves context while users move between graph, translation, review, and validation work. |
 | 2026-07-15 | All assets bundled locally | Enforces the offline product contract. |
+| 2026-07-18 | GitHub is an optional per-project workspace | Keeps authoring fully offline while giving teams explicit in-app repository and PR controls without Terminal. |
+| 2026-07-18 | Native adaptive Android workspace for the Daylight DC-1 | Preserves Reed's production density while supporting grayscale, portrait, landscape, split-screen, touch, keyboard, mouse, and trackpad input. |
+| 2026-07-19 | Foreground, time-limited Android Remote Agent Access | Lets Claude Android edit the active local project through guarded MCP tools while keeping the connection explicit, revocable, and separate from Git. |

@@ -13,6 +13,8 @@ export interface ProjectRecord {
   schemaVersion: number;
   languages: string[];
   defaultLanguage: string;
+  pullRequestProvider: "disabled" | "github";
+  pullRequestBaseBranch: string;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -78,6 +80,7 @@ export interface DialogueNodeRecord {
   subtitleOverride: "none" | "forced";
   contextComment: string;
   voiceComment: string;
+  pronunciation: string;
   contextPath: string[];
   lineStatus: TextStatus;
   voiceStatus: VoiceStatus;
@@ -202,4 +205,8 @@ export interface ProjectSnapshot {
   variables: VariableRecord[];
   partitions: DatabasePartitionRecord[];
   reviewSnapshots: ReviewSnapshotRecord[];
+  /** Highest numeric entry ID ever issued per conversation, including deleted nodes. */
+  allocations?: {
+    entryNumericIds: Record<string, number>;
+  };
 }
