@@ -1,0 +1,80 @@
+name: Bug report
+description: Report reproducible behavior that is wrong or unsafe
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve Reed. Use a disposable project where possible and remove story text, tokens, repository capabilities, and connector URLs from screenshots and logs.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS Apple silicon
+        - Android / Daylight DC-1
+        - Android / another device
+        - CLI
+        - Local MCP
+        - Remote Agent Access / relay
+        - Export / Unity integration
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Reed version or commit
+      placeholder: v0.1.2 or commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and its effect on your work.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create a disposable project...
+        2. Open...
+        3. Select...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: dropdown
+    id: network
+    attributes:
+      label: Network state
+      options:
+        - Offline
+        - Online, GitHub disabled
+        - Online, GitHub enabled
+        - Remote Agent Access active
+        - Not relevant
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Add screenshots or logs only after removing private story content, tokens, paths, and connector URLs.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I have not included a GitHub token, connector capability, private repository URL, database, or private story content.
+          required: true
+        - label: This is not a security vulnerability. I will use private vulnerability reporting for security-sensitive issues.
+          required: true
