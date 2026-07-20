@@ -1,0 +1,53 @@
+name: Feature request
+description: Propose a bounded improvement to Reed's authoring workflow
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Authoring problem
+      description: What job is difficult today, and who is doing it?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful outcome, not only an implementation.
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Primary surface
+      options:
+        - macOS editor
+        - Android / Daylight DC-1
+        - Both editors
+        - CLI
+        - MCP / external agents
+        - Pixel Crushers / Unity export
+        - Voice production
+        - Git / GitHub collaboration
+    validations:
+      required: true
+  - type: textarea
+    id: offline
+    attributes:
+      label: Offline behavior
+      description: Explain how this remains useful without a network and whether it proposes any new network boundary.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Product boundaries
+      options:
+        - label: The proposal does not require a Reed account, telemetry, cloud project storage, remote assets, or an embedded LLM.
+          required: true

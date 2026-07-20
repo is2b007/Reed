@@ -1,8 +1,26 @@
 {
   "name": "reed",
   "version": "0.1.9",
+  "description": "Offline-first branching dialogue editor for Unity and Pixel Crushers on macOS and Android",
   "private": true,
   "type": "module",
+  "homepage": "https://github.com/is2b007/Reed#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/is2b007/Reed.git"
+  },
+  "bugs": {
+    "url": "https://github.com/is2b007/Reed/issues"
+  },
+  "keywords": [
+    "branching-dialogue",
+    "unity",
+    "pixel-crushers",
+    "narrative-design",
+    "localization",
+    "offline-first",
+    "mcp"
+  ],
   "packageManager": "pnpm@11.8.0",
   "engines": {
     "node": ">=22.22.0"
