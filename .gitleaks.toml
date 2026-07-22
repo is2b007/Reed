@@ -1,0 +1,13 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic Remote Agent Access tokens used by the Android URL-shape test"
+regexTarget = "match"
+regexes = [
+  '''deviceToken = "rdv_0123456789abcdefghijklmnopqrstuv"''',
+  '''connectorToken = "rcc_0123456789abcdefghijklmnopqrstuv"''',
+]
+paths = [
+  '''apps/android/remote/src/test/java/com/reed/remote/RemoteAccessModelsTest\.kt''',
+]

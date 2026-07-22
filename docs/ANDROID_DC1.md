@@ -125,7 +125,7 @@ The 2026-07-20 development build passed Android Core, Git, offline-boundary, sty
 ```text
 dist/Reed-Android-DC1-debug.apk
 SHA-256 5cee77c5afc149573e0cf7d2531d98abac0d250a84044f1f779bb596bc5a2f31
-package com.reed.editor · version 0.1.0 (1) · min API 33 · target API 36
+package com.reed.editor · version 0.2.0 (10) · min API 33 · target API 36
 ```
 
 The debug APK was installed and launched on DC-1 `JPCQ01140`. An on-device synthetic Wacom event stream verified that a barrel-button marquee takes exclusive gesture ownership and does not also pan the canvas. Physical hover height, Sol:OS palm rejection, background suspend/resume, and the full split-screen acceptance matrix still require human hardware checks. The APK is debug-signed for direct development installation, not public distribution.

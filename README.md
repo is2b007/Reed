@@ -26,15 +26,17 @@ Reed keeps that work together. It is a visual writing room for narrative designe
 
 Your project stays on your device. Opening, writing, saving, validating, backing up, playtesting, and exporting do not require an account or an internet connection.
 
-## Download Reed 0.1.9
+## Download Reed 0.2.0
 
 | Platform | Download | Notes |
 |---|---|---|
-| macOS Apple silicon | [DMG](https://github.com/is2b007/Reed/releases/download/v0.1.9/Reed-0.1.9-arm64.dmg) · [ZIP](https://github.com/is2b007/Reed/releases/download/v0.1.9/Reed-darwin-arm64-0.1.9.zip) | Locally signed, not Apple-notarized. Control-click **Reed.app** and choose **Open** if Gatekeeper asks. |
-| Windows 10/11 x64 | [ZIP](https://github.com/is2b007/Reed/releases/download/v0.1.9/Reed-win32-x64-0.1.9.zip) | Unzip and run `Reed.exe`. The pre-1.0 build is not code-signed, so SmartScreen may ask for confirmation. |
-| Android 13+ | [APK](https://github.com/is2b007/Reed/releases/download/v0.1.9/Reed-android-0.1.9-debug.apk) | Development-signed APK for sideloading. Built for tablets and tested on the Daylight DC-1. |
+| macOS Apple silicon | [DMG](https://github.com/is2b007/Reed/releases/download/v0.2.0/Reed-0.2.0-macos-arm64.dmg) · [ZIP](https://github.com/is2b007/Reed/releases/download/v0.2.0/Reed-0.2.0-macos-arm64.zip) | Developer ID signed, Apple-notarized, and stapled for offline Gatekeeper verification. |
+| Windows 10/11 x64 | [ZIP](https://github.com/is2b007/Reed/releases/download/v0.2.0/Reed-0.2.0-windows-x64.zip) | Authenticode-signed; unzip and run `Reed.exe`. |
+| Android 13+ | [APK](https://github.com/is2b007/Reed/releases/download/v0.2.0/Reed-0.2.0-android.apk) · [AAB](https://github.com/is2b007/Reed/releases/download/v0.2.0/Reed-0.2.0-android.aab) | Release-signed APK for direct installation and AAB for compatible stores. Built for tablets and tested on the Daylight DC-1. |
 
 [Release notes, checksums, and previous versions](https://github.com/is2b007/Reed/releases)
+
+Reed is free and open source. If it helps your game, you can optionally support its continued development on [itch.io](https://maniadesign.itch.io/reed); downloading and using Reed never requires a payment, account, or license key.
 
 > [!IMPORTANT]
 > Reed is pre-1.0 software. Keep project backups and verify generated output against the exact engine, localization, and production toolchain used by your game before shipping.
@@ -285,4 +287,4 @@ scripts/    offline verification, demo, and relay operations
 
 Contributions are welcome once the repository is made public. Read [CONTRIBUTING.md](CONTRIBUTING.md), follow the [Code of Conduct](CODE_OF_CONDUCT.md), and use the issue forms for reproducible bugs or bounded proposals. Security-sensitive reports belong in [GitHub’s private vulnerability report](https://github.com/is2b007/Reed/security/advisories/new), not a public issue.
 
-No open-source license has been selected yet. Until a `LICENSE` file is added, copyright law applies and the source is not licensed for reuse or redistribution. The [open-source launch checklist](docs/OPEN_SOURCE_CHECKLIST.md) records the remaining repository-owner decisions.
+Reed is open source under the [Mozilla Public License 2.0](LICENSE). You may use Reed to create commercial or non-commercial games; your game, story, project files, and exports are yours and are not covered by Reed's source-code license. If you distribute modified Reed source files, the MPL requires those files to remain available under the MPL. Reed's name and logo are not licensed as trademarks. Runtime dependency licenses are recorded in [Third-party notices](THIRD_PARTY_NOTICES.md).
