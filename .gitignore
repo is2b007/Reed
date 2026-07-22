@@ -28,6 +28,12 @@ exports/
 .vscode/
 *.swp
 
+# local agent and browser tooling
+AGENTS.md
+.agents/
+.codex/
+.playwright-mcp/
+
 # Android local toolchain and build state
 apps/android/.gradle/
 apps/android/local.properties
