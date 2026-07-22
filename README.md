@@ -26,13 +26,15 @@ Reed keeps that work together. It is a visual writing room for narrative designe
 
 Your project stays on your device. Opening, writing, saving, validating, backing up, playtesting, and exporting do not require an account or an internet connection.
 
-## Download Reed 0.2.0
+## Download Reed
+
+The current installable release is **Reed 0.1.9**. Reed 0.2.0 source is now on `main`; its downloads will be published only after the macOS and Windows packages pass the new release-signing gates.
 
 | Platform | Download | Notes |
 |---|---|---|
-| macOS Apple silicon | [DMG](https://github.com/is2b007/Reed/releases/download/v0.2.0/Reed-0.2.0-macos-arm64.dmg) · [ZIP](https://github.com/is2b007/Reed/releases/download/v0.2.0/Reed-0.2.0-macos-arm64.zip) | Developer ID signed, Apple-notarized, and stapled for offline Gatekeeper verification. |
-| Windows 10/11 x64 | [ZIP](https://github.com/is2b007/Reed/releases/download/v0.2.0/Reed-0.2.0-windows-x64.zip) | Authenticode-signed; unzip and run `Reed.exe`. |
-| Android 13+ | [APK](https://github.com/is2b007/Reed/releases/download/v0.2.0/Reed-0.2.0-android.apk) · [AAB](https://github.com/is2b007/Reed/releases/download/v0.2.0/Reed-0.2.0-android.aab) | Release-signed APK for direct installation and AAB for compatible stores. Built for tablets and tested on the Daylight DC-1. |
+| macOS Apple silicon | [DMG](https://github.com/is2b007/Reed/releases/download/v0.1.9/Reed-0.1.9-arm64.dmg) · [ZIP](https://github.com/is2b007/Reed/releases/download/v0.1.9/Reed-darwin-arm64-0.1.9.zip) | Locally signed but not Apple-notarized; macOS may ask you to Control-click and choose **Open**. |
+| Windows 10/11 x64 | [ZIP](https://github.com/is2b007/Reed/releases/download/v0.1.9/Reed-win32-x64-0.1.9.zip) | Not yet Authenticode-signed; Windows SmartScreen may ask for confirmation. |
+| Android 13+ | [APK](https://github.com/is2b007/Reed/releases/download/v0.1.9/Reed-android-0.1.9-debug.apk) | Development-signed sideload build for tablets, tested on the Daylight DC-1. It cannot upgrade over the forthcoming release-signed build. |
 
 [Release notes, checksums, and previous versions](https://github.com/is2b007/Reed/releases)
 
