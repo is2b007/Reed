@@ -6,10 +6,9 @@ Thank you for helping build Reed. This project values small, reviewable changes 
 
 Read:
 
-1. [AGENTS.md](AGENTS.md) for non-negotiable implementation rules;
-2. [DESIGN.md](DESIGN.md) before changing interface behavior or appearance;
-3. [ARCHITECTURE.md](ARCHITECTURE.md) before changing persistence, networking, Git, MCP, or platform boundaries; and
-4. [the offline contract](docs/OFFLINE_CONTRACT.md) before adding any runtime dependency or entrypoint.
+1. [DESIGN.md](DESIGN.md) before changing interface behavior or appearance;
+2. [ARCHITECTURE.md](ARCHITECTURE.md) before changing persistence, networking, Git, MCP, or platform boundaries; and
+3. [the offline contract](docs/OFFLINE_CONTRACT.md) before adding any runtime dependency or entrypoint.
 
 Please use an issue before starting a large feature, a data migration, a new network boundary, or a change to permanent IDs/export compatibility. Small bug fixes with a clear regression test can go directly to a pull request.
 
@@ -100,7 +99,11 @@ Test tablet UI changes in portrait, landscape, split screen, and a compact windo
 - Add a migration for persisted model changes and preserve older projects.
 - Never recycle Line IDs or Pixel Crushers numeric mappings.
 - Preserve optimistic concurrency and mutation history.
+- Keep Final content under human control; agents cannot promote text beyond `Polished`.
+- Changing recorded-or-later dialogue must return its voice status to `Rework`.
+- Give destructive actions a confirmation step or a reversible undo path.
 - Do not add a background fetch, telemetry call, updater, remote asset, hosted configuration, Reed account, or embedded LLM.
+- Never persist GitHub credentials in a project, database, preferences, logs, or Git configuration.
 - Keep Git/GitHub optional, per-project, and user-triggered.
 - Keep Remote Agent Access off by default, expiring, foreground-visible, and limited to guarded Reed tools.
 - Add or update an automated offline test for every runtime entrypoint.

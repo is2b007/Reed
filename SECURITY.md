@@ -54,6 +54,6 @@ Please report:
 
 The complete acceptance contract is in [docs/OFFLINE_CONTRACT.md](docs/OFFLINE_CONTRACT.md), and the Android relay threat model is in [docs/REMOTE_MCP_ANDROID.md](docs/REMOTE_MCP_ANDROID.md).
 
-## Public hardening work
+## Public repository protections
 
-Before the repository becomes public, the owner should enable GitHub private vulnerability reporting, secret scanning, dependency alerts, and branch protection. See [docs/OPEN_SOURCE_CHECKLIST.md](docs/OPEN_SOURCE_CHECKLIST.md).
+Use GitHub's private vulnerability-reporting link above for sensitive findings. Release automation fails closed when platform-signing credentials are missing, and CI verifies the offline contract before changes are merged.

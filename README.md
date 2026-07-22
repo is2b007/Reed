@@ -272,8 +272,7 @@ scripts/    offline verification, demo, and relay operations
 
 | Start here | Purpose |
 |---|---|
-| [Product brief](docs/PRODUCT_BRIEF.md) | Product goals, users, and scope |
-| [Editor design](docs/EDITOR_DESIGN.md) | Workspace behavior and interaction rationale |
+| [Design system](DESIGN.md) | Interface principles, layout, accessibility, and motion |
 | [Architecture](ARCHITECTURE.md) | Components, sources of truth, and network boundaries |
 | [Data model](docs/DATA_MODEL.md) | Project hierarchy, IDs, versions, and graph records |
 | [Languages and game exports](docs/LOCALIZATION_EXPORTS.md) | Language catalog and every engine/interchange format |
@@ -287,6 +286,6 @@ scripts/    offline verification, demo, and relay operations
 
 ## Contributing and license
 
-Contributions are welcome once the repository is made public. Read [CONTRIBUTING.md](CONTRIBUTING.md), follow the [Code of Conduct](CODE_OF_CONDUCT.md), and use the issue forms for reproducible bugs or bounded proposals. Security-sensitive reports belong in [GitHub’s private vulnerability report](https://github.com/is2b007/Reed/security/advisories/new), not a public issue.
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md), follow the [Code of Conduct](CODE_OF_CONDUCT.md), and use the issue forms for reproducible bugs or bounded proposals. Security-sensitive reports belong in [GitHub’s private vulnerability report](https://github.com/is2b007/Reed/security/advisories/new), not a public issue.
 
 Reed is open source under the [Mozilla Public License 2.0](LICENSE). You may use Reed to create commercial or non-commercial games; your game, story, project files, and exports are yours and are not covered by Reed's source-code license. If you distribute modified Reed source files, the MPL requires those files to remain available under the MPL. Reed's name and logo are not licensed as trademarks. Runtime dependency licenses are recorded in [Third-party notices](THIRD_PARTY_NOTICES.md).
