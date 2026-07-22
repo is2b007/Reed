@@ -88,7 +88,7 @@ class AndroidMcpDispatcher(
                 put("tools", buildJsonObject { put("listChanged", false) })
                 put("resources", buildJsonObject { put("subscribe", false); put("listChanged", false) })
             })
-            put("serverInfo", buildJsonObject { put("name", "reed-android"); put("version", "0.1.0") })
+            put("serverInfo", buildJsonObject { put("name", "reed-android"); put("version", "0.2.0") })
             put("instructions", "Edit only the active local Reed project. Read versions before writes. Git is not available through Remote Agent Access.")
         }
     }

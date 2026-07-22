@@ -4,6 +4,7 @@ node_modules/
 dist/
 build/
 out/
+release/
 .webpack/
 coverage/
 .turbo/
@@ -33,6 +34,10 @@ apps/android/local.properties
 apps/android/**/build/
 *.apk
 *.aab
+*.jks
+*.keystore
+*.p12
+*.pfx
 captures/
 
 # test artifacts

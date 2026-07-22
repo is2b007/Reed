@@ -17,6 +17,27 @@ val escapedDefaultAgentRelayUrl = defaultAgentRelayUrl
     .replace("\\", "\\\\")
     .replace("\"", "\\\"")
 
+val releaseKeystorePath = providers.environmentVariable("REED_ANDROID_KEYSTORE_PATH")
+    .orElse(providers.gradleProperty("reedAndroidKeystorePath"))
+    .orNull?.trim().orEmpty()
+val releaseKeystorePassword = providers.environmentVariable("REED_ANDROID_KEYSTORE_PASSWORD")
+    .orElse(providers.gradleProperty("reedAndroidKeystorePassword"))
+    .orNull.orEmpty()
+val releaseKeyAlias = providers.environmentVariable("REED_ANDROID_KEY_ALIAS")
+    .orElse(providers.gradleProperty("reedAndroidKeyAlias"))
+    .orElse("reed-release")
+    .get()
+    .trim()
+val releaseKeyPassword = providers.environmentVariable("REED_ANDROID_KEY_PASSWORD")
+    .orElse(providers.gradleProperty("reedAndroidKeyPassword"))
+    .orNull.orEmpty()
+val hasReleaseSigning = listOf(
+    releaseKeystorePath,
+    releaseKeystorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all(String::isNotBlank)
+
 android {
     namespace = "com.reed.editor"
     compileSdk = 36
@@ -25,8 +46,8 @@ android {
         applicationId = "com.reed.editor"
         minSdk = 33
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.1.9"
+        versionCode = 10
+        versionName = "0.2.0"
         buildConfigField("String", "DEFAULT_AGENT_RELAY_URL", "\"$escapedDefaultAgentRelayUrl\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -45,6 +66,29 @@ android {
 
     kotlinOptions { jvmTarget = "17" }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseKeystorePath)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+    }
+
     packaging.resources.excludes += setOf(
         "META-INF/AL2.0",
         "META-INF/LGPL2.1",
@@ -52,6 +96,19 @@ android {
         "META-INF/NOTICE*",
         "META-INF/DEPENDENCIES"
     )
+}
+
+gradle.taskGraph.whenReady {
+    val releaseArtifactRequested = allTasks.any { task ->
+        task.name.matches(Regex("(?i)(assemble|bundle).*release"))
+    }
+    if (releaseArtifactRequested && !hasReleaseSigning) {
+        throw GradleException(
+            "Android release builds require REED_ANDROID_KEYSTORE_PATH, " +
+                "REED_ANDROID_KEYSTORE_PASSWORD, REED_ANDROID_KEY_ALIAS, and " +
+                "REED_ANDROID_KEY_PASSWORD. Reed will not publish an unsigned release.",
+        )
+    }
 }
 
 dependencies {

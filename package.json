@@ -1,8 +1,9 @@
 {
   "name": "reed",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "description": "Offline-first branching dialogue and game-localization editor for macOS, Windows, and Android",
   "private": true,
+  "license": "MPL-2.0",
   "type": "module",
   "homepage": "https://github.com/is2b007/Reed#readme",
   "repository": {
@@ -14,8 +15,8 @@
   },
   "keywords": [
     "branching-dialogue",
-    "unity",
-    "pixel-crushers",
+    "game-writing",
+    "interactive-fiction",
     "narrative-design",
     "localization",
     "offline-first",
