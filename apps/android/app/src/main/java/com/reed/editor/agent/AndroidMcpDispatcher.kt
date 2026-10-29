@@ -94,7 +94,8 @@ class AndroidMcpDispatcher(
     }
 
     private fun callTool(name: String, arguments: JsonObject): JsonElement {
-        val snapshot = core.exportSnapshot(projectId)
+        // Serializing the whole project is only needed by read tools; mutations skip it.
+        val snapshot by lazy { core.exportSnapshot(projectId) }
         val value = when (name) {
             "get_schema" -> schemaDescriptor()
             "list_projects" -> json.encodeToJsonElement(listOf(snapshot.project))
@@ -143,9 +144,14 @@ class AndroidMcpDispatcher(
             }
             "add_dialogue_node" -> addNode(arguments)
             "update_node_text", "set_line_text" -> {
+                val lineId = arguments.string("lineId")
+                val language = arguments.string("language")
+                // An omitted menuText keeps the current choice label, as on desktop.
+                val menuText = if (arguments.containsKey("menuText")) arguments.optionalString("menuText")
+                else core.nodeByLineId(projectId, lineId).texts.firstOrNull { it.language == language }?.menuText
                 val result = core.setNodeText(
-                    projectId, arguments.string("lineId"), arguments.string("language"), arguments.string("text"),
-                    arguments.optionalString("menuText"), arguments.long("expectedVersion"), "agent",
+                    projectId, lineId, language, arguments.string("text"),
+                    menuText, arguments.long("expectedVersion"), "agent",
                 )
                 mutation(json.encodeToJsonElement(result.value), result.version, result.changeSequence)
             }
@@ -249,7 +255,9 @@ class AndroidMcpDispatcher(
         return value
     }
 
-    private fun addNode(arguments: JsonObject): JsonElement {
+    private fun addNode(arguments: JsonObject): JsonElement = core.atomically { addNodeSteps(arguments) }
+
+    private fun addNodeSteps(arguments: JsonObject): JsonElement {
         val kind = NodeKind.valueOf(arguments.optionalString("kind")?.uppercase() ?: "LINE")
         var result = core.createNode(
             projectId, arguments.string("conversationId"), kind,

@@ -1,6 +1,10 @@
 package com.reed.editor
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -1854,7 +1858,6 @@ private fun AgentAccessWorkspace(
     modifier: Modifier,
 ) {
     val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
     var confirmStart by remember { mutableStateOf(false) }
     var permissionError by remember { mutableStateOf<String?>(null) }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -2005,7 +2008,7 @@ private fun AgentAccessWorkspace(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Spacer(Modifier.height(8.dp))
-                        Button(onClick = { clipboard.setText(AnnotatedString(connectorUrl)) }, shape = RoundedCornerShape(5.dp)) {
+                        Button(onClick = { copySensitiveText(context, "Reed connector URL", connectorUrl) }, shape = RoundedCornerShape(5.dp)) {
                             Icon(Icons.Outlined.ContentCopy, null)
                             Spacer(Modifier.width(6.dp))
                             Text("Copy URL")
@@ -2022,7 +2025,7 @@ private fun AgentAccessWorkspace(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Spacer(Modifier.width(8.dp))
-                        Button(onClick = { clipboard.setText(AnnotatedString(connectorUrl)) }, shape = RoundedCornerShape(5.dp)) {
+                        Button(onClick = { copySensitiveText(context, "Reed connector URL", connectorUrl) }, shape = RoundedCornerShape(5.dp)) {
                             Icon(Icons.Outlined.ContentCopy, null)
                             Spacer(Modifier.width(6.dp))
                             Text("Copy")
@@ -2753,3 +2756,11 @@ private fun speakerAccentColor(characterId: String?): Color {
 }
 
 private fun languageName(code: String) = GameLanguages.displayName(code)
+
+/** The connector URL is a bearer credential: mark it sensitive so Android hides it from clipboard previews. */
+private fun copySensitiveText(context: Context, label: String, value: String) {
+    val clip = ClipData.newPlainText(label, value).apply {
+        description.extras = android.os.PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
+    }
+    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+}

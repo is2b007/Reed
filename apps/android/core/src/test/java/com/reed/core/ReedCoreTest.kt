@@ -144,4 +144,34 @@ class ReedCoreTest {
         assertEquals(line.value.lineId, result.value)
         assertTrue(core.conversationGraph(graph.id).nodes.none { it.id == line.value.id })
     }
+
+    @Test
+    fun editingFinalTextReopensItAndUnchangedTextKeepsVoiceStatus() {
+        val created = core.createProject("Final Test", "final-test")
+        val graph = created.conversations.single()
+        val node = core.createNode(created.project.id, graph.id, NodeKind.LINE, 100.0, 100.0, graph.version)
+        val written = core.setNodeText(created.project.id, node.value.lineId, "en", "Hold the line.", "Hold", node.version)
+        val finalized = core.setLineStatus(created.project.id, node.value.lineId, TextStatus.FINAL, written.version)
+
+        val unchanged = core.setNodeText(created.project.id, node.value.lineId, "en", "Hold the line.", "Hold", finalized.version)
+        assertEquals(TextStatus.FINAL, core.nodeByLineId(created.project.id, node.value.lineId).lineStatus)
+
+        core.setNodeText(created.project.id, node.value.lineId, "en", "Hold the harbour.", "Hold", unchanged.version)
+        val reopened = core.nodeByLineId(created.project.id, node.value.lineId)
+        assertEquals(TextStatus.REWORK, reopened.lineStatus)
+        assertEquals("Hold", reopened.texts.first { it.language == "en" }.menuText)
+    }
+
+    @Test
+    fun variablesRejectInitialValuesOfTheWrongType() {
+        val created = core.createProject("Variable Test", "variable-test")
+        try {
+            core.upsertVariable(created.project.id, null, "Gold", "number", kotlinx.serialization.json.JsonPrimitive("five"), "", created.project.version)
+            fail("Expected a type mismatch")
+        } catch (error: IllegalArgumentException) {
+            assertEquals("Initial value must match the number variable type", error.message)
+        }
+        val saved = core.upsertVariable(created.project.id, null, "Gold", "number", kotlinx.serialization.json.JsonPrimitive(5), "", created.project.version)
+        assertEquals("5", saved.value.initialValue.toString())
+    }
 }
