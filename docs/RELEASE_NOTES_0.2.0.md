@@ -16,6 +16,15 @@ Reed is now an open-source, offline-first narrative design and production worksp
 - Native Android tablet support tested around the Daylight DC-1, including keyboard, mouse, trackpad, Wacom EMR hover, barrel-button marquee, and responsive collapsible panes.
 - Automatic, Light, and Dark appearance modes on desktop and Android.
 
+## Fixes since 0.1.9
+
+- Restoring a backup keeps your backup history and saves a "Before restore" snapshot first; desktop History can now restore snapshots.
+- Pixel Crushers export writes typed variables, Localization fields, and VoiceOverFile entrytags for Unity.
+- Yarn Spinner export now includes playable `.yarn` scripts, not just strings tables.
+- Android: pulling no longer overwrites edits made since the last checkpoint, and editing Final text sends it back to Rework.
+- Remote Agent Access no longer drops requests on flaky connections.
+- Hardened agent export paths, Git remote handling, and the packaged desktop app.
+
 ## Trust model
 
 Reed needs no account and keeps project data on the device. Opening, writing, saving, backing up, validating, playtesting, and exporting make no network requests. Network access is limited to Git/GitHub actions the user explicitly starts and explicit, time-limited Android Remote Agent Access sessions.
