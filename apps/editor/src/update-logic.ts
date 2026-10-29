@@ -14,6 +14,29 @@ const allowedUpdateHosts = new Set([
 export interface ReleaseAsset { name: string; url: string; size: number }
 export interface ReleaseInfo { version: string; tag: string; pageUrl: string; notes: string; assets: ReleaseAsset[] }
 
+/** Follows redirects by hand so every hop is checked against the allowlist. Electron's
+ * session.fetch reports an empty response.url, so the final URL cannot be trusted to show where
+ * an automatic redirect went. */
+export async function fetchAllowedUpdate(
+  fetcher: (url: string, init: RequestInit) => Promise<Response>,
+  url: string,
+  init: RequestInit = {},
+  maxRedirects = 5,
+): Promise<Response> {
+  let current = url;
+  for (let hop = 0; hop <= maxRedirects; hop += 1) {
+    if (!isAllowedUpdateUrl(current)) {
+      throw new Error(hop === 0 ? "Refusing to contact an unexpected update host" : "The update was redirected to an unexpected host");
+    }
+    const response = await fetcher(current, { ...init, redirect: "manual" });
+    if (response.status < 300 || response.status >= 400) return response;
+    const location = response.headers.get("location");
+    if (!location) throw new Error(`GitHub answered ${response.status} without a redirect location`);
+    current = new URL(location, current).toString();
+  }
+  throw new Error("The update was redirected too many times");
+}
+
 export function isAllowedUpdateUrl(value: string): boolean {
   try {
     const url = new URL(value);

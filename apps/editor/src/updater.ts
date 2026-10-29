@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { app, session, shell, type Session } from "electron";
 import type { UpdateState } from "./contract.js";
 import {
-  installLocationProblem, isAllowedUpdateUrl, isNewerVersion, latestReleaseUrl, parseChecksums, parseRelease,
+  fetchAllowedUpdate, installLocationProblem, isAllowedUpdateUrl, isNewerVersion, latestReleaseUrl, parseChecksums, parseRelease,
   updateAssetName, updateRepository, type ReleaseInfo,
 } from "./update-logic.js";
 
@@ -213,9 +213,12 @@ export class DesktopUpdater {
 
   private async get(url: string, headers: Record<string, string> = {}): Promise<Response> {
     if (!isAllowedUpdateUrl(url)) throw new Error("Refusing to contact an unexpected update host");
-    this.network ??= session.fromPartition("reed-updates", { cache: false });
-    const response = await this.network.fetch(url, { headers: { "User-Agent": `Reed/${app.getVersion()}`, ...headers }, redirect: "follow" });
-    if (!isAllowedUpdateUrl(response.url)) throw new Error("The update was redirected to an unexpected host");
+    const network = this.network ??= session.fromPartition("reed-updates", { cache: false });
+    const response = await fetchAllowedUpdate(
+      (target, init) => network.fetch(target, init),
+      url,
+      { headers: { "User-Agent": `Reed/${app.getVersion()}`, ...headers } },
+    );
     if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
     return response;
   }
