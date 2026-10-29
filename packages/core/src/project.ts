@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, rename, unlink } from "node:fs/promises";
+import { copyFile, mkdir, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -915,8 +915,14 @@ export class ReedProject {
   listBackups(): BackupRecord[] {
     return (this.db.prepare("SELECT * FROM backup_records ORDER BY created_at DESC, id DESC").all() as Row[]).map((row) => ({
       id: String(row.id), projectId: String(row.project_id), kind: String(row.kind) as BackupRecord["kind"],
-      label: row.label === null ? null : String(row.label), filePath: String(row.file_path), createdAt: String(row.created_at),
+      label: row.label === null ? null : String(row.label), filePath: this.resolveBackupPath(String(row.file_path)), createdAt: String(row.created_at),
     }));
+  }
+
+  /** Backup paths are stored absolute; fall back to the backups folder when the project has been moved or cloned. */
+  private resolveBackupPath(stored: string): string {
+    if (existsSync(stored)) return stored;
+    return path.join(this.paths.backups, path.basename(stored));
   }
 
   async approveReview(label: string): Promise<ReviewSnapshotRecord> {
@@ -935,27 +941,35 @@ export class ReedProject {
     return record;
   }
 
-  async restoreBackup(backupId: string, confirmation: string): Promise<{ restoredBackupId: string; database: string }> {
+  async restoreBackup(backupId: string, confirmation: string): Promise<{ restoredBackupId: string; database: string; safetyBackupId: string }> {
     if (confirmation !== backupId) throw new GuardrailError("Restore confirmation must exactly match the backup ID", { backupId });
     const row = this.db.prepare("SELECT file_path FROM backup_records WHERE id = ?").get(backupId) as Row | undefined;
     if (!row) throw new NotFoundError("Backup", backupId);
-    const source = String(row.file_path);
-    const temporary = `${this.paths.database}.restore`;
+    const source = this.resolveBackupPath(String(row.file_path));
+    const temporary = `${this.paths.database}.${randomUUID().slice(0, 8)}.restore`;
     await copyFile(source, temporary);
-    const check = new Database(temporary, { readonly: true });
     try {
-      if (check.pragma("integrity_check", { simple: true }) !== "ok") throw new ConflictError("Selected backup failed SQLite integrity checking", { backupId });
+      const check = new Database(temporary);
+      try {
+        if (check.pragma("integrity_check", { simple: true }) !== "ok") throw new ConflictError("Selected backup failed SQLite integrity checking", { backupId });
+        // Keep the current state restorable, and carry every known backup into the restored database so
+        // later pruning never mistakes newer backups for orphans.
+        const safety = await this.createBackup("named", "Before restore");
+        const records = this.db.prepare("SELECT id, project_id, kind, label, file_path, created_at FROM backup_records").all() as Row[];
+        const insert = check.prepare(`INSERT OR IGNORE INTO backup_records(id, project_id, kind, label, file_path, created_at)
+          VALUES (@id, @project_id, @kind, @label, @file_path, @created_at)`);
+        check.transaction(() => { for (const record of records) insert.run(record); })();
+        // The SQLite backup API writes into the live database under proper locks, so other open
+        // connections (desktop, MCP, CLI) see the restored content instead of a deleted WAL.
+        await check.backup(this.paths.database);
+        this.close();
+        return { restoredBackupId: backupId, database: this.paths.database, safetyBackupId: safety.id };
+      } finally {
+        check.close();
+      }
     } finally {
-      check.close();
+      await Promise.all([temporary, `${temporary}-wal`, `${temporary}-shm`].map((file) => unlink(file).catch(() => undefined)));
     }
-    this.checkpoint();
-    this.close();
-    await Promise.all([
-      unlink(`${this.paths.database}-wal`).catch(() => undefined),
-      unlink(`${this.paths.database}-shm`).catch(() => undefined),
-    ]);
-    await rename(temporary, this.paths.database);
-    return { restoredBackupId: backupId, database: this.paths.database };
   }
 
   checkpoint(): void {
@@ -971,13 +985,8 @@ export class ReedProject {
     const stale = this.db.prepare("SELECT id, file_path FROM backup_records WHERE kind = 'rolling' ORDER BY created_at DESC, id DESC LIMIT -1 OFFSET ?")
       .all(ROLLING_BACKUP_LIMIT) as Row[];
     for (const row of stale) {
-      await unlink(String(row.file_path)).catch(() => undefined);
+      await unlink(this.resolveBackupPath(String(row.file_path))).catch(() => undefined);
       this.db.prepare("DELETE FROM backup_records WHERE id = ?").run(row.id);
-    }
-    const known = new Set(this.listBackups().map((record) => record.filePath));
-    for (const filename of await readdir(this.paths.backups)) {
-      const filePath = path.join(this.paths.backups, filename);
-      if (filename.endsWith("-rolling.sqlite") && !known.has(filePath)) await unlink(filePath).catch(() => undefined);
     }
   }
 
