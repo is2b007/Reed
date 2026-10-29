@@ -5,7 +5,7 @@ import {
   type OnConnectEnd, type ReactFlowInstance,
 } from "@xyflow/react";
 import type {
-  CharacterRecord, ConversationGraph, DialogueNodeRecord, MutationRecord, ProjectSnapshot,
+  BackupRecord, CharacterRecord, ConversationGraph, DialogueNodeRecord, MutationRecord, ProjectSnapshot,
   ProjectGitHubPullRequest, ProjectGitHubStatus, ProjectGitStatus, ProjectRecord, SceneRecord, SearchResult, ValidationIssue, ValidationReport, VariableRecord,
 } from "@reed/core";
 import { GAME_LANGUAGE_CATALOG, GAME_LANGUAGE_PRESET, canonicalizeLanguageCode, getLanguageDefinition, isLanguageCode } from "@reed/schema";
@@ -1099,7 +1099,28 @@ function GitHubPanel({ project, gitStatus, github, onGitHub, onGitStatus, onProj
   </section>;
 }
 
-function ProjectHistory({ project, github, onGitHub, onProjectSettings }: { project: ProjectRecord; github: ProjectGitHubStatus | null; onGitHub(status: ProjectGitHubStatus | null): void; onProjectSettings(): void }) {
+function BackupSnapshots({ onRestored }: { onRestored(): Promise<void> }) {
+  const [backups, setBackups] = useState<BackupRecord[]>([]);
+  const [pending, setPending] = useState<string | null>(null);
+  const [working, setWorking] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const load = useCallback(async () => { try { setBackups(await window.reed.listBackups()); } catch (value) { setError(message(value)); } }, []);
+  useEffect(() => { void load(); }, [load]);
+  const restore = async (backup: BackupRecord) => {
+    setWorking(true); setError(""); setNotice("");
+    try { await window.reed.restoreBackup(backup.id, backup.id); setPending(null); setNotice(`Restored ${backup.label ?? "snapshot"} from ${new Date(backup.createdAt).toLocaleString()}. The previous state was saved as “Before restore”.`); await onRestored(); await load(); }
+    catch (value) { setError(message(value)); }
+    finally { setWorking(false); }
+  };
+  return <section className="history-panel history-commits"><div className="section-heading"><div><p className="eyebrow">Local snapshots</p><h3>Restore a backup</h3></div><span>{backups.length} kept</span></div><p>Reed saves automatic and named SQLite snapshots on this device. Restoring first saves the current state, so a restore can always be undone.</p>
+    {error && <div className="error-banner" role="alert">{error}</div>}{notice && <div className="history-notice" role="status">{notice}</div>}
+    {backups.length ? <ol>{backups.slice(0, 20).map((backup) => <li key={backup.id}><code>{backup.kind}</code><div><strong>{backup.label ?? "Automatic snapshot"}</strong><span>{new Date(backup.createdAt).toLocaleString()}</span></div>{pending === backup.id
+      ? <span><button type="button" className="primary" disabled={working} onClick={() => void restore(backup)}>{working ? "Restoring…" : "Confirm restore"}</button><button type="button" disabled={working} onClick={() => setPending(null)}>Cancel</button></span>
+      : <button type="button" disabled={working} onClick={() => setPending(backup.id)}>Restore…</button>}</li>)}</ol> : <p>No snapshots yet. Reed creates one automatically while you edit.</p>}</section>;
+}
+
+function ProjectHistory({ project, github, onGitHub, onProjectSettings, onRestored }: { project: ProjectRecord; github: ProjectGitHubStatus | null; onGitHub(status: ProjectGitHubStatus | null): void; onProjectSettings(): void; onRestored(): Promise<void> }) {
   const [status, setStatus] = useState<ProjectGitStatus | null>(null);
   const [checkpointName, setCheckpointName] = useState("");
   const [branchName, setBranchName] = useState("story/");
@@ -1121,6 +1142,7 @@ function ProjectHistory({ project, github, onGitHub, onProjectSettings }: { proj
       <section className="history-panel"><div className="section-heading"><div><p className="eyebrow">Branches</p><h3>Start a story branch</h3></div><span>{status.branch}</span></div><p>Keep each reviewable story change on its own local branch. Creating a branch never uses the network.</p><form className="branch-form" onSubmit={(event) => { event.preventDefault(); void createBranch(); }}><label htmlFor="branch-name">New branch</label><div><input id="branch-name" value={branchName} maxLength={128} required placeholder="story/chapter-one" onChange={(event) => setBranchName(event.target.value)} /><button type="submit" disabled={working || !status.clean || !branchName.trim()}>Start branch</button></div><small>Checkpoint pending changes before switching branches.</small></form></section>
       <GitHubPanel project={project} gitStatus={status} github={github} onGitHub={onGitHub} onGitStatus={setStatus} onProjectSettings={onProjectSettings} />
       <section className="history-panel history-commits"><div className="section-heading"><div><p className="eyebrow">Retention</p><h3>Recent checkpoints</h3></div><span>{status.commits.length} shown</span></div>{status.commits.length ? <ol>{status.commits.map((commit) => <li key={commit.id}><code>{commit.shortId}</code><div><strong>{commit.summary}</strong><span>{new Date(commit.createdAt).toLocaleString()} · {commit.author}</span></div></li>)}</ol> : <p>No checkpoints yet.</p>}</section></div>}
+    <BackupSnapshots onRestored={onRestored} />
   </div>;
 }
 
@@ -1253,7 +1275,7 @@ function EditorApp() {
     {!navigatorOpen && (desktopPanelLayout() || !inspectorOpen) && <button type="button" className="panel-restore project" aria-controls="project-navigator" aria-expanded="false" aria-label="Open project navigator" title="Open Project navigator (⌘K)" onClick={() => { setNavigatorOpen(true); if (!desktopPanelLayout()) setInspectorOpen(false); }}>Project<kbd>⌘K</kbd></button>}
     {(workspace === "graph" || workspace === "translation") && graph && !inspectorOpen && (desktopPanelLayout() || !navigatorOpen) && <button type="button" className="panel-restore panel-restore-inspector" aria-controls="line-inspector" aria-expanded="false" aria-label="Open line inspector" title="Open Inspector" onClick={() => { setInspectorOpen(true); if (!desktopPanelLayout()) setNavigatorOpen(false); }}>Inspector</button>}
     <Navigator snapshot={snapshot} selectedConversationId={conversationId} open={navigatorOpen} onConversation={chooseConversation} onScene={() => chooseWorkspace("beats")} onProjectSettings={() => setProjectSettingsOpen(true)} onClose={() => setNavigatorOpen(false)} />
-    <main className="workspace">{workspace === "graph" && <GraphWorkspace graph={graph} snapshot={snapshot} selectedNodeId={selectedNodeId} onSelect={selectNode} onMutated={refresh} primary={primary} secondary={secondary} />}{workspace === "beats" && <BeatMap snapshot={snapshot} onConversation={chooseConversation} refresh={refresh} />}{workspace === "playtest" && <Playtest graph={graph} snapshot={snapshot} language={primary} />}{workspace === "translation" && <Translation graph={graph} snapshot={snapshot} primary={primary} secondary={secondary} onSelect={selectNode} />}{workspace === "characters" && <Characters snapshot={snapshot} refresh={refresh} />}{workspace === "variables" && <Variables snapshot={snapshot} refresh={refresh} />}{workspace === "validation" && <Validation report={state.validation} onJump={jumpIssue} />}{workspace === "review" && <Review refresh={refresh} />}{workspace === "production" && <Production snapshot={snapshot} validation={state.validation} request={exportRequest} onRequestHandled={() => setExportRequest(null)} />}{workspace === "history" && <ProjectHistory project={snapshot.project} github={githubStatus} onGitHub={setGitHubStatus} onProjectSettings={() => setProjectSettingsOpen(true)} />}{workspace === "read" && <ReadView snapshot={snapshot} />}</main>
+    <main className="workspace">{workspace === "graph" && <GraphWorkspace graph={graph} snapshot={snapshot} selectedNodeId={selectedNodeId} onSelect={selectNode} onMutated={refresh} primary={primary} secondary={secondary} />}{workspace === "beats" && <BeatMap snapshot={snapshot} onConversation={chooseConversation} refresh={refresh} />}{workspace === "playtest" && <Playtest graph={graph} snapshot={snapshot} language={primary} />}{workspace === "translation" && <Translation graph={graph} snapshot={snapshot} primary={primary} secondary={secondary} onSelect={selectNode} />}{workspace === "characters" && <Characters snapshot={snapshot} refresh={refresh} />}{workspace === "variables" && <Variables snapshot={snapshot} refresh={refresh} />}{workspace === "validation" && <Validation report={state.validation} onJump={jumpIssue} />}{workspace === "review" && <Review refresh={refresh} />}{workspace === "production" && <Production snapshot={snapshot} validation={state.validation} request={exportRequest} onRequestHandled={() => setExportRequest(null)} />}{workspace === "history" && <ProjectHistory project={snapshot.project} github={githubStatus} onGitHub={setGitHubStatus} onProjectSettings={() => setProjectSettingsOpen(true)} onRestored={refresh} />}{workspace === "read" && <ReadView snapshot={snapshot} />}</main>
     {(workspace === "graph" || workspace === "translation") && graph && <Inspector graph={graph} node={selectedNode} primary={primary} secondary={secondary} languages={snapshot.project.languages} characters={snapshot.characters} open={inspectorOpen} onMutated={refresh} onDirty={() => setSaveState({ status: "dirty" })} onClose={() => setInspectorOpen(false)} />}
     {(navigatorOpen || inspectorOpen) && <button type="button" className="panel-scrim" aria-label="Close open panel" onClick={() => { setNavigatorOpen(false); setInspectorOpen(false); }} />}
     <footer className="status-bar"><span><i className={state.validation.valid ? "ok" : "bad"} />{state.validation.valid ? "Validation clear" : `${state.validation.errors} errors`}</span><span>{notice}</span><span>{state.root}</span><div className="language-switch"><select aria-label="Primary language" title="Primary language" value={primary} onChange={(event) => setPrimary(event.target.value)}>{snapshot.project.languages.map((language) => <option key={language}>{language}</option>)}</select><button type="button" aria-label="Swap primary and reference languages" title="Swap primary and reference languages" onClick={() => { setPrimary(secondary); setSecondary(primary); }}>⇄</button><select aria-label="Reference language" title="Reference language" value={secondary} onChange={(event) => setSecondary(event.target.value)}>{snapshot.project.languages.map((language) => <option key={language}>{language}</option>)}</select></div></footer>

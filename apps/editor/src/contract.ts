@@ -1,4 +1,5 @@
 import type {
+  BackupRecord,
   ConversationGraph,
   MutationRecord,
   ProjectGitCheckpointResult,
@@ -74,6 +75,8 @@ export interface ReedDesktopApi {
   getAppearance(): Promise<AppearanceState>;
   setAppearance(preference: AppearancePreference): Promise<AppearanceState>;
   revealInFinder(filePath: string): Promise<void>;
+  listBackups(): Promise<BackupRecord[]>;
+  restoreBackup(backupId: string, confirmation: string): Promise<EditorBootstrap>;
   setActiveWorkspace(workspace: WorkspaceId): Promise<void>;
   onMenuCommand(listener: (command: MenuCommand) => void): () => void;
   onSaveState(listener: (event: SaveStateEvent) => void): () => void;

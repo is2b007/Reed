@@ -49,6 +49,8 @@ const api: ReedDesktopApi = {
   getAppearance: () => ipcRenderer.invoke("reed:get-appearance"),
   setAppearance: (preference) => ipcRenderer.invoke("reed:set-appearance", preference),
   revealInFinder: (filePath) => ipcRenderer.invoke("reed:reveal", filePath),
+  listBackups: () => ipcRenderer.invoke("reed:backups"),
+  restoreBackup: (backupId, confirmation) => ipcRenderer.invoke("reed:restore-backup", backupId, confirmation),
   setActiveWorkspace: (workspace) => ipcRenderer.invoke("reed:active-workspace", workspace),
   onMenuCommand: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, command: MenuCommand) => listener(command);

@@ -69,12 +69,18 @@ importers:
       '@electron-forge/plugin-auto-unpack-natives':
         specifier: 7.8.3
         version: 7.8.3
+      '@electron-forge/plugin-fuses':
+        specifier: 7.8.3
+        version: 7.8.3(@electron/fuses@1.8.0)
       '@electron-forge/plugin-webpack':
         specifier: 7.8.3
         version: 7.8.3(esbuild@0.27.7)(postcss@8.5.19)(webpack-cli@6.0.1)
       '@electron-forge/shared-types':
         specifier: 7.8.3
         version: 7.8.3
+      '@electron/fuses':
+        specifier: 1.8.0
+        version: 1.8.0
       '@electron/rebuild':
         specifier: 4.0.4
         version: 4.0.4
@@ -209,6 +215,12 @@ packages:
     resolution: {integrity: sha512-0CzPQlO3BGu5bLCrx2Xqo6B1yoHhA9wG9boZE58ANr8Qma1NQfAWZU3LnMmF3EdWNTX76PxpZeeb3QbPNcxSuA==}
     engines: {node: '>= 16.4.0'}
 
+  '@electron-forge/plugin-fuses@7.8.3':
+    resolution: {integrity: sha512-OPWfoVsQ3xzK7GB3C6zoGlUu21RCOEQAm5+zg9VP1HJg5dsrKkqU8A2DsHGxe7PHthUCuQUgcls0ciDOHvckCQ==}
+    engines: {node: '>= 16.4.0'}
+    peerDependencies:
+      '@electron/fuses': ^1.0.0
+
   '@electron-forge/plugin-webpack@7.8.3':
     resolution: {integrity: sha512-euFE8zhuBGvuokpLjUbkPWL9AI3vx35so1jmegZ0+cuSY9r6e0xmJdlJ34i7PG0FnK++4wvMamy/zR0gqDVHrA==}
     engines: {node: '>= 16.4.0'}
@@ -256,6 +268,10 @@ packages:
   '@electron/asar@3.4.1':
     resolution: {integrity: sha512-i4/rNPRS84t0vSRa2HorerGRXWyF4vThfHesw0dmcWHp+cspK743UanA0suA5Q5y8kzY2y6YKrvbIUn69BCAiA==}
     engines: {node: '>=10.12.0'}
+    hasBin: true
+
+  '@electron/fuses@1.8.0':
+    resolution: {integrity: sha512-zx0EIq78WlY/lBb1uXlziZmDZI4ubcCXIMJ4uGjXzZW0nS19TjSPeXPAjzzTmKQlJUZm0SbmZhPKP7tuQ1SsEw==}
     hasBin: true
 
   '@electron/get@3.1.0':
@@ -1067,6 +1083,7 @@ packages:
   '@xmldom/xmldom@0.9.10':
     resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
     engines: {node: '>=14.6'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@xtuc/ieee754@1.2.0':
     resolution: {integrity: sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA==}
@@ -4143,6 +4160,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@electron-forge/plugin-fuses@7.8.3(@electron/fuses@1.8.0)':
+    dependencies:
+      '@electron-forge/plugin-base': 7.8.3
+      '@electron-forge/shared-types': 7.8.3
+      '@electron/fuses': 1.8.0
+    transitivePeerDependencies:
+      - supports-color
+
   '@electron-forge/plugin-webpack@7.8.3(esbuild@0.27.7)(postcss@8.5.19)(webpack-cli@6.0.1)':
     dependencies:
       '@electron-forge/core-utils': 7.8.3
@@ -4258,6 +4283,12 @@ snapshots:
       commander: 5.1.0
       glob: 7.2.3
       minimatch: 3.1.5
+
+  '@electron/fuses@1.8.0':
+    dependencies:
+      chalk: 4.1.2
+      fs-extra: 9.1.0
+      minimist: 1.2.8
 
   '@electron/get@3.1.0':
     dependencies:

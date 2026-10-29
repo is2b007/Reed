@@ -9,6 +9,8 @@ import { fileURLToPath } from "node:url";
 import { MakerDMG } from "@electron-forge/maker-dmg";
 import { MakerZIP } from "@electron-forge/maker-zip";
 import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-natives";
+import { FusesPlugin } from "@electron-forge/plugin-fuses";
+import { FuseV1Options, FuseVersion } from "@electron/fuses";
 import { WebpackPlugin } from "@electron-forge/plugin-webpack";
 import { mainConfig } from "./webpack.main.config.js";
 import { rendererConfig } from "./webpack.renderer.config.js";
@@ -185,6 +187,15 @@ const config: ForgeConfig = {
   })],
   plugins: [
     new AutoUnpackNativesPlugin({}),
+    // Packaged Reed must not double as a general Node runtime or accept injected Node flags.
+    new FusesPlugin({
+      version: FuseVersion.V1,
+      [FuseV1Options.RunAsNode]: false,
+      [FuseV1Options.EnableCookieEncryption]: true,
+      [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
+      [FuseV1Options.EnableNodeCliInspectArguments]: false,
+      [FuseV1Options.OnlyLoadAppFromAsar]: true,
+    }),
     new WebpackPlugin({
       mainConfig,
       renderer: {
