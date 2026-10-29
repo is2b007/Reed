@@ -1,10 +1,11 @@
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fontkit from "@pdf-lib/fontkit";
 import ExcelJS from "exceljs";
 import { PDFDocument, rgb, type PDFFont, type PDFPage, type RGB } from "pdf-lib";
+import { atomicWriteFile } from "./atomic-write.js";
 import { ConflictError } from "./errors.js";
 import type { CharacterRecord, ConversationGraph, DialogueNodeRecord, ProjectRecord } from "./models.js";
 import type { ReedProject } from "./project.js";
@@ -573,9 +574,5 @@ export async function exportScreenplay(reed: ReedProject, language?: string, sec
     }
   }
   const target = path.join(reed.paths.exports, "screenplay.md");
-  const temporary = `${target}.tmp`;
-  await mkdir(path.dirname(target), { recursive: true });
-  await writeFile(temporary, `${lines.join("\n")}\n`, "utf8");
-  await rename(temporary, target);
-  return target;
+  return atomicWriteFile(target, `${lines.join("\n")}\n`);
 }

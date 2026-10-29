@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import {
   canonicalizeLanguageCode,
@@ -8,6 +8,7 @@ import {
   localeForUnity,
   localeForUnreal,
 } from "@reed/schema";
+import { atomicWriteFile } from "./atomic-write.js";
 import { ConflictError } from "./errors.js";
 import type { CharacterRecord, DialogueNodeRecord } from "./models.js";
 import type { ReedProject } from "./project.js";
@@ -181,13 +182,7 @@ function resources(entries: LocalizationEntry[]): StringResource[] {
   });
 }
 
-async function atomicWrite(filePath: string, contents: string): Promise<string> {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  const temporary = `${filePath}.tmp`;
-  await writeFile(temporary, contents, "utf8");
-  await rename(temporary, filePath);
-  return filePath;
-}
+const atomicWrite = atomicWriteFile;
 
 function resourceComment(resource: StringResource): string {
   return [
