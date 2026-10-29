@@ -159,7 +159,7 @@ const config: ForgeConfig = {
         execFileSync("/usr/bin/xattr", ["-cr", signatureValidationApp]);
         execFileSync("/usr/bin/codesign", ["--verify", "--deep", "--strict", signatureValidationApp], { stdio: "inherit" });
         if (productionRelease) {
-          execFileSync("/usr/bin/xcrun", ["stapler", "validate", signatureValidationApp], { stdio: "inherit" });
+          // spctl checks the stapled ticket offline; `stapler validate` asks CloudKit and drops on CI runners.
           execFileSync("/usr/sbin/spctl", ["--assess", "--type", "execute", "--verbose=4", signatureValidationApp], { stdio: "inherit" });
         }
         await rm(signatureValidationDirectory, { recursive: true, force: true });
