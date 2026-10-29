@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { atomicWriteFile } from "./atomic-write.js";
 import type { ProjectSnapshot } from "./models.js";
@@ -32,5 +33,9 @@ export function serializeProject(reed: ReedProject): string {
 
 export async function exportProjectJson(reed: ReedProject, outputPath?: string): Promise<string> {
   const target = path.resolve(outputPath ?? path.join(reed.paths.exports, "reed-project.json"));
-  return atomicWriteFile(target, serializeProject(reed));
+  const serialized = serializeProject(reed);
+  // Skip identical rewrites so status checks do not churn file timestamps or watchers.
+  const current = await readFile(target, "utf8").catch(() => null);
+  if (current === serialized) return target;
+  return atomicWriteFile(target, serialized);
 }

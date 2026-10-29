@@ -83,7 +83,7 @@ async function loadAppSettings(): Promise<void> {
 
 async function saveAppSettings(): Promise<void> {
   const file = appSettingsFile();
-  const temporary = `${file}.tmp`;
+  const temporary = `${file}.${process.pid}.tmp`;
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(temporary, `${JSON.stringify({ appearance: appearancePreference }, null, 2)}\n`, "utf8");
   await rename(temporary, file);
@@ -117,7 +117,7 @@ async function loadRecentProjects(): Promise<RecentProject[]> {
 
 async function saveRecentProjects(): Promise<void> {
   const file = recentProjectsFile();
-  const temporary = `${file}.tmp`;
+  const temporary = `${file}.${process.pid}.tmp`;
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(temporary, `${JSON.stringify(recentProjects, null, 2)}\n`, "utf8");
   await rename(temporary, file);

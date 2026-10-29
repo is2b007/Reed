@@ -48,7 +48,7 @@ reed export-game-data --project /path/to/project --format unreal-string-table --
 
 Allowed formats are `json`, `csv`, `unity-localization`, `godot`, `unreal-string-table`, `yarn-spinner`, `gettext`, and `xliff-2.0`.
 
-Local agents can call `export_game_data` with `format`, optional `languages`, and an optional local `outputDirectory`. `get_schema` returns the catalog and states the BCP 47 language contract. The tool is local stdio on desktop and never makes a network request.
+Local agents can call `export_game_data` with `format`, optional `languages`, and an optional `outputDirectory` inside the project (relative paths resolve under `exports/`; paths outside the project are rejected). `get_schema` returns the catalog and states the BCP 47 language contract. The tool is local stdio on desktop and never makes a network request.
 
 ## Integration checks before shipping
 

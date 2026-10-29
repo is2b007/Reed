@@ -49,6 +49,17 @@ function errorResponse(error: unknown): CallToolResult {
 }
 
 const project = await ReedProject.open(projectArgument());
+
+/** Agents may only write exports inside the open project; relative paths resolve under its exports folder. */
+function projectOutputDirectory(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const target = path.resolve(project.paths.exports, value);
+  const relative = path.relative(project.paths.root, target);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new ReedError("Agent exports must stay inside the open Reed project", "OUTPUT_OUTSIDE_PROJECT", { outputDirectory: value, root: project.paths.root });
+  }
+  return target;
+}
 const server = new McpServer({ name: "reed", version: "0.2.0" });
 
 function register<T extends z.AnyZodObject>(name: string, description: string, schema: T, handler: (args: z.infer<T>) => unknown | Promise<unknown>): void {
@@ -98,16 +109,16 @@ register("upsert_character", "Create or update a cast entry with a persistent ac
 register("declare_variable", "Create or update a typed condition variable with a persistent numeric ID.", DeclareVariableInputSchema, (args) => project.declareVariable({ ...args, source: "agent" }));
 register("import_conversation_json", "Bulk-create and deterministically auto-layout a complete conversation graph.", ImportConversationInputSchema, (args) => project.importConversation({ ...args, source: "agent" }));
 register("export_pixelcrushers", "Validate and export local Pixel Crushers DialogueDatabase JSON.", z.object({
-  mode: z.enum(["single", "partitioned"]).default("single"), outputDirectory: z.string().optional(), allowInvalid: z.boolean().default(false),
-}), (args) => exportPixelCrushers(project, args));
+  mode: z.enum(["single", "partitioned"]).default("single"), outputDirectory: z.string().optional().describe("Inside the project; relative paths resolve under exports/"), allowInvalid: z.boolean().default(false),
+}), (args) => exportPixelCrushers(project, { ...args, outputDirectory: projectOutputDirectory(args.outputDirectory) }));
 register("export_game_data", "Export local engine and localization interchange files using permanent Reed Line IDs.", z.object({
   format: z.enum(["json", "csv", "unity-localization", "godot", "unreal-string-table", "yarn-spinner", "gettext", "xliff-2.0"]),
   outputDirectory: z.string().optional(),
   languages: z.array(z.string()).optional(),
-}), (args) => exportGameData(project, args));
+}), (args) => exportGameData(project, { ...args, outputDirectory: projectOutputDirectory(args.outputDirectory) }));
 register("export_voice", "Export local voice-actor PDF and studio CSV/XLSX files.", z.object({
   outputDirectory: z.string().optional(), language: z.string().optional(), characterIds: z.array(z.string().uuid()).optional(), voiceStatuses: z.array(z.string()).optional(), lineStatuses: z.array(z.string()).optional(),
-}), (args) => exportVoicePackage(project, args));
+}), (args) => exportVoicePackage(project, { ...args, outputDirectory: projectOutputDirectory(args.outputDirectory) }));
 
 server.registerResource("project-schema", "reed://schema", { title: "Reed schema", mimeType: "application/json" }, async (uri) => ({
   contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(getSchemaDescriptor(), null, 2) }],
