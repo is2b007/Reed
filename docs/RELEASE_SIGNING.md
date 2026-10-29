@@ -16,7 +16,7 @@ Public macOS builds require a **Developer ID Application** identity and Apple no
 - `APPLE_API_KEY_ID`
 - `APPLE_API_ISSUER`
 
-The workflow imports the certificate into a temporary keychain, signs Reed with Hardened Runtime, submits it to Apple's notary service, staples the ticket, and verifies it with `codesign` and Gatekeeper's `spctl` (which checks the stapled ticket offline). The temporary runner is discarded after the job.
+The workflow imports the certificate into a temporary keychain, signs Reed with Hardened Runtime, submits it to Apple's notary service with `notarytool` (the build fails unless Apple accepts it), staples the ticket, and verifies it with `codesign` and Gatekeeper's `spctl`. Stapling needs Apple's CloudKit, which GitHub's macOS runners often cannot reach, so it is retried five times and then skipped with a warning: a notarized but unstapled app still opens normally, because macOS fetches the ticket online on first launch. The temporary runner is discarded after the job.
 
 For a local release, set `REED_RELEASE_SIGNING=1`, `APPLE_SIGNING_IDENTITY`, and one notarization method supported by `forge.config.ts`. A Keychain profile is preferred on a maintainer Mac because the secret stays in Keychain.
 
