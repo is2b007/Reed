@@ -9,7 +9,7 @@ import type {
   ProjectGitHubPullRequest, ProjectGitHubStatus, ProjectGitStatus, ProjectRecord, SceneRecord, SearchResult, ValidationIssue, ValidationReport, VariableRecord,
 } from "@reed/core";
 import { GAME_LANGUAGE_CATALOG, GAME_LANGUAGE_PRESET, canonicalizeLanguageCode, getLanguageDefinition, isLanguageCode } from "@reed/schema";
-import type { AppearancePreference, AppearanceState, EditorBootstrap, ExportKind, MutationName, SaveStateEvent, WorkspaceId } from "./contract.js";
+import type { AppearancePreference, AppearanceState, EditorBootstrap, ExportKind, MutationName, SaveStateEvent, UpdateState, WorkspaceId } from "./contract.js";
 import type { RecentProject } from "./recent-projects.js";
 import { conditionVariableNames, createPickerPosition, evaluatePlaytestCondition, globalShortcut, nextAppearancePreference, nextMenuIndex, nodeKindOptions, nodePositionForConnectionDrop, parseLanguageList, promptValueIsValid, speakerAccent, variableInitialValueLabel, type AddableNodeKind } from "./ui-logic.js";
 import reedLogo from "../assets/reed-logo.png";
@@ -413,9 +413,43 @@ function ProjectSettingsDialog({ state, onClose, onSaved }: { state: EditorBoots
   return <ModalDialog labelledBy="project-settings-title" onClose={onClose}><form className="project-settings" onSubmit={(event) => void save(event)}><header><div><p className="eyebrow">Project settings</p><h2 id="project-settings-title">Identity, languages & collaboration</h2></div><button type="button" aria-label="Close project settings" onClick={onClose}>×</button></header><section className="settings-section" aria-labelledby="identity-settings-heading"><h3 id="identity-settings-heading">Identity</h3><div className="metadata-grid"><label>Project name<input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} /></label><label>Stable slug<input value={slug} maxLength={63} aria-describedby="project-slug-help" onChange={(event) => setSlug(event.target.value)} /></label></div><p id="project-slug-help" className="form-help">The slug controls local export filenames. Existing Line IDs and Pixel Crushers IDs remain permanent.</p></section><LanguageConfigurator languages={languages} defaultLanguage={defaultLanguage} onLanguages={(next) => setLanguageList(next.join(", "))} onDefaultLanguage={setDefaultLanguage} /><section className="settings-section" aria-labelledby="collaboration-settings-heading"><h3 id="collaboration-settings-heading">GitHub collaboration</h3><div className="metadata-grid"><label>GitHub<select value={pullRequestProvider} aria-describedby="pull-request-provider-help" onChange={(event) => setPullRequestProvider(event.target.value as ProjectRecord["pullRequestProvider"])}><option value="disabled">Off — fully offline</option><option value="github">On — network when requested</option></select></label><label>Pull request base branch<input value={pullRequestBaseBranch} maxLength={128} aria-invalid={!validBranch} aria-describedby="pull-request-base-help" onChange={(event) => setPullRequestBaseBranch(event.target.value)} /></label></div><p id="pull-request-provider-help" className="form-help">When on, Reed can sign in, create or connect repositories, fetch, push, review, and merge from the History workspace. Nothing runs in the background, and Reed never stores your GitHub token.</p><p id="pull-request-base-help" className="form-help">Use the branch contributors should propose changes into, usually <code>main</code>. Remote PR merges do not silently replace the open SQLite story.</p></section><label>Project location<input value={state.root} readOnly aria-readonly="true" /></label><div className="project-settings-meta"><span>Schema {project.schemaVersion}</span><span>Project version {project.version}</span></div>{error && <div className="error-banner" role="alert">{error}</div>}<div className="metadata-actions"><button type="button" onClick={onClose}>Cancel</button><button type="submit" className="primary" disabled={saving || !valid}>{saving ? "Saving…" : "Save project settings"}</button></div></form></ModalDialog>;
 }
 
-function PreferencesDialog({ appearance, onAppearance, onClose }: { appearance: AppearanceState; onAppearance(preference: AppearancePreference): Promise<void>; onClose(): void }) {
+function updateStatusText(update: UpdateState): string {
+  if (update.status === "checking") return "Checking GitHub for a newer release…";
+  if (update.status === "current") return `Reed ${update.currentVersion} is the latest version.`;
+  if (update.status === "available") return `Reed ${update.latestVersion} is available. You have ${update.currentVersion}.`;
+  if (update.status === "downloading") return `Downloading Reed ${update.latestVersion}… ${Math.round((update.progress ?? 0) * 100)}%`;
+  if (update.status === "installing") return update.message ?? "Installing…";
+  if (update.status === "error") return update.message ?? "The update check failed.";
+  return `You have Reed ${update.currentVersion}.`;
+}
+
+function UpdateSettings({ update }: { update: UpdateState }) {
   const [error, setError] = useState("");
-  return <ModalDialog labelledBy="preferences-title" onClose={onClose}><section className="preferences-dialog"><header><div><p className="eyebrow">Reed settings</p><h2 id="preferences-title">Appearance</h2></div><button type="button" aria-label="Close Reed settings" onClick={onClose}>×</button></header><fieldset><legend>Theme</legend>{appearanceOptions.map((option) => <label key={option.value} className={appearance.preference === option.value ? "selected" : ""}><input type="radio" name="appearance" value={option.value} checked={appearance.preference === option.value} onChange={() => { setError(""); void onAppearance(option.value).catch((value) => setError(message(value))); }} /><span><strong>{option.label}</strong><small>{option.description}</small></span></label>)}</fieldset><p className="form-help">This preference is stored only on this Mac. Automatic updates when macOS changes appearance.</p>{error && <div className="error-banner" role="alert">{error}</div>}<div className="metadata-actions"><button type="button" className="primary" onClick={onClose}>Done</button></div></section></ModalDialog>;
+  const busy = update.status === "checking" || update.status === "downloading" || update.status === "installing";
+  const act = (action: () => Promise<unknown>) => { setError(""); void action().catch((value) => setError(message(value))); };
+  return <section className="settings-section update-settings" aria-labelledby="update-settings-heading"><h3 id="update-settings-heading">Updates</h3>
+    <p role="status" className={update.status === "error" ? "update-status bad" : "update-status"}>{updateStatusText(update)}</p>
+    {update.status === "downloading" && <progress max={1} value={update.progress ?? 0} aria-label="Update download progress" />}
+    <div className="metadata-actions">
+      {update.releaseUrl && (update.status === "available" || update.status === "error") && <button type="button" className="update-notes" onClick={() => act(() => window.reed.openUpdateRelease())}>Release page</button>}
+      <button type="button" disabled={busy} onClick={() => act(() => window.reed.checkForUpdates())}>{update.status === "checking" ? "Checking…" : "Check for updates"}</button>
+      {update.status === "available" && <button type="button" className="primary" disabled={!update.canInstall} title={update.canInstall ? undefined : "This copy of Reed cannot replace itself. Download the update from the release page."} onClick={() => act(() => window.reed.installUpdate())}>Install and restart</button>}
+    </div>
+    <label className="update-auto"><input type="checkbox" checked={update.autoCheck} onChange={(event) => act(() => window.reed.setAutoUpdateCheck(event.target.checked))} /><span><strong>Check automatically</strong><small>When on, Reed asks GitHub for new releases at launch and twice a day. Nothing installs without your OK.</small></span></label>
+    <p className="form-help">Checking contacts GitHub only when you press the button or turn on automatic checks. Updates are verified against the release checksums, and your projects are not touched.</p>
+    {error && <div className="error-banner" role="alert">{error}</div>}
+  </section>;
+}
+
+function UpdateBanner({ update, onOpen }: { update: UpdateState | null; onOpen(): void }) {
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  if (!update || !["available", "downloading", "installing"].includes(update.status) || dismissed === update.latestVersion) return null;
+  return <aside className="update-banner" role="status"><span>{update.status === "available" ? `Reed ${update.latestVersion} is available.` : updateStatusText(update)}</span>{update.status === "available" && <><button type="button" className="primary" onClick={onOpen}>View update</button><button type="button" aria-label="Dismiss update notice" onClick={() => setDismissed(update.latestVersion ?? null)}>×</button></>}</aside>;
+}
+
+function PreferencesDialog({ appearance, update, onAppearance, onClose }: { appearance: AppearanceState; update: UpdateState | null; onAppearance(preference: AppearancePreference): Promise<void>; onClose(): void }) {
+  const [error, setError] = useState("");
+  return <ModalDialog labelledBy="preferences-title" onClose={onClose}><section className="preferences-dialog"><header><div><p className="eyebrow">Reed settings</p><h2 id="preferences-title">Appearance & updates</h2></div><button type="button" aria-label="Close Reed settings" onClick={onClose}>×</button></header><fieldset><legend>Theme</legend>{appearanceOptions.map((option) => <label key={option.value} className={appearance.preference === option.value ? "selected" : ""}><input type="radio" name="appearance" value={option.value} checked={appearance.preference === option.value} onChange={() => { setError(""); void onAppearance(option.value).catch((value) => setError(message(value))); }} /><span><strong>{option.label}</strong><small>{option.description}</small></span></label>)}</fieldset><p className="form-help">This preference is stored only on this Mac. Automatic updates when macOS changes appearance.</p>{update && <UpdateSettings update={update} />}{error && <div className="error-banner" role="alert">{error}</div>}<div className="metadata-actions"><button type="button" className="primary" onClick={onClose}>Done</button></div></section></ModalDialog>;
 }
 
 function Navigator({ snapshot, selectedConversationId, open, onConversation, onScene, onProjectSettings, onClose }: { snapshot: ProjectSnapshot; selectedConversationId: string | null; open: boolean; onConversation(id: string): void; onScene(id: string): void; onProjectSettings(): void; onClose(): void }) {
@@ -1182,6 +1216,8 @@ function EditorApp() {
   }, []);
   useEffect(() => { void Promise.all([window.reed.getBootstrap(), window.reed.getRecentProjects(), window.reed.getAppearance()]).then(([value, recent, nextAppearance]) => { applyAppearance(nextAppearance); setAppearanceState(nextAppearance); setRecentProjects(recent); if (value) applyBootstrap(value); else setHomeVisible(true); setAppReady(true); }); }, [applyBootstrap]);
   useEffect(() => window.reed.onAppearanceChanged((next) => { applyAppearance(next); setAppearanceState(next); }), []);
+  const [updateState, setUpdateState] = useState<UpdateState | null>(null);
+  useEffect(() => { void window.reed.getUpdateState().then(setUpdateState); return window.reed.onUpdateState(setUpdateState); }, []);
   const chooseAppearance = useCallback(async (preference: AppearancePreference) => { const next = await window.reed.setAppearance(preference); applyAppearance(next); setAppearanceState(next); }, []);
   useEffect(() => window.reed.onSaveState(setSaveState), []);
   const loadConversation = useCallback(async (id: string | null): Promise<ConversationGraph | null> => { if (!id) { setGraph(null); return null; } const value = await window.reed.getConversation(id); setGraph(value); setSelectedNodeId((current) => value.nodes.some((node) => node.id === current) ? current : value.nodes.find((node) => node.kind !== "start")?.id ?? value.nodes[0]?.id ?? null); return value; }, []);
@@ -1228,7 +1264,7 @@ function EditorApp() {
         if (command.type === "close-project") { clearRendererProject(); return; }
         if (command.type === "open-project") { const root = await window.reed.chooseProject(); if (root) await openProjectRoot(root); return; }
         if (command.type === "open-recent") { await openProjectRoot(command.root); return; }
-        if (command.type === "preferences") { setPreferencesOpen(true); return; }
+        if (command.type === "preferences" || command.type === "check-updates") { setPreferencesOpen(true); return; }
         if (command.type === "project-settings") { if (state) setProjectSettingsOpen(true); return; }
         if (command.type === "focus-search") { if (state) { setHomeVisible(false); window.requestAnimationFrame(() => searchInputRef.current?.focus()); } return; }
         if (command.type === "toggle-navigator") { if (state) { setHomeVisible(false); setNavigatorOpen((value) => !value); if (!desktopPanelLayout()) setInspectorOpen(false); } return; }
@@ -1240,7 +1276,7 @@ function EditorApp() {
     })();
   }), [chooseWorkspace, clearRendererProject, openProjectRoot, prompt, state]);
   if (!appReady) return <main className="launch-screen"><img src={reedLogo} alt="" /><span>Opening Reed…</span></main>;
-  if (homeVisible || !state) return <><ProjectHome current={state} recentProjects={recentProjects} mode={homeMode} appearance={appearance} onMode={setHomeMode} onReady={applyBootstrap} onContinue={() => setHomeVisible(false)} onRecentProjects={setRecentProjects} onAppearance={chooseAppearance} />{state && projectSettingsOpen && <ProjectSettingsDialog state={state} onClose={() => setProjectSettingsOpen(false)} onSaved={async () => { await refresh(); setRecentProjects(await window.reed.getRecentProjects()); }} />}{preferencesOpen && <PreferencesDialog appearance={appearance} onAppearance={chooseAppearance} onClose={() => setPreferencesOpen(false)} />}</>;
+  if (homeVisible || !state) return <><ProjectHome current={state} recentProjects={recentProjects} mode={homeMode} appearance={appearance} onMode={setHomeMode} onReady={applyBootstrap} onContinue={() => setHomeVisible(false)} onRecentProjects={setRecentProjects} onAppearance={chooseAppearance} />{state && projectSettingsOpen && <ProjectSettingsDialog state={state} onClose={() => setProjectSettingsOpen(false)} onSaved={async () => { await refresh(); setRecentProjects(await window.reed.getRecentProjects()); }} />}{preferencesOpen && <PreferencesDialog appearance={appearance} update={updateState} onAppearance={chooseAppearance} onClose={() => setPreferencesOpen(false)} />}<UpdateBanner update={updateState} onOpen={() => setPreferencesOpen(true)} /></>;
   const snapshot = state.snapshot; const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const chooseConversation = (id: string) => { setConversationId(id); setWorkspace("graph"); if (!desktopPanelLayout()) { setNavigatorOpen(false); setInspectorOpen(false); } };
   const selectNode = (id: string) => { setSelectedNodeId(id); setInspectorOpen(true); };
@@ -1280,7 +1316,7 @@ function EditorApp() {
     {(navigatorOpen || inspectorOpen) && <button type="button" className="panel-scrim" aria-label="Close open panel" onClick={() => { setNavigatorOpen(false); setInspectorOpen(false); }} />}
     <footer className="status-bar"><span><i className={state.validation.valid ? "ok" : "bad"} />{state.validation.valid ? "Validation clear" : `${state.validation.errors} errors`}</span><span>{notice}</span><span>{state.root}</span><div className="language-switch"><select aria-label="Primary language" title="Primary language" value={primary} onChange={(event) => setPrimary(event.target.value)}>{snapshot.project.languages.map((language) => <option key={language}>{language}</option>)}</select><button type="button" aria-label="Swap primary and reference languages" title="Swap primary and reference languages" onClick={() => { setPrimary(secondary); setSecondary(primary); }}>⇄</button><select aria-label="Reference language" title="Reference language" value={secondary} onChange={(event) => setSecondary(event.target.value)}>{snapshot.project.languages.map((language) => <option key={language}>{language}</option>)}</select></div></footer>
     {projectSettingsOpen && <ProjectSettingsDialog state={state} onClose={() => setProjectSettingsOpen(false)} onSaved={async () => { await refresh(); setRecentProjects(await window.reed.getRecentProjects()); }} />}
-    {preferencesOpen && <PreferencesDialog appearance={appearance} onAppearance={chooseAppearance} onClose={() => setPreferencesOpen(false)} />}
+    {preferencesOpen && <PreferencesDialog appearance={appearance} update={updateState} onAppearance={chooseAppearance} onClose={() => setPreferencesOpen(false)} />}<UpdateBanner update={updateState} onOpen={() => setPreferencesOpen(true)} />
   </div>;
 }
 

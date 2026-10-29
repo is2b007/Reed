@@ -29,6 +29,7 @@ import {
   validateProject,
 } from "@reed/core";
 import type { AppearancePreference, AppearanceState, EditorBootstrap, ExportKind, MenuCommand, MutationName, WorkspaceId } from "./contract.js";
+import { DesktopUpdater } from "./updater.js";
 import { forgetRecentProject, parseRecentProjects, upsertRecentProject, type RecentProject } from "./recent-projects.js";
 
 let window: BrowserWindow | null = null;
@@ -36,6 +37,8 @@ let reed: ReedProject | null = null;
 let recentProjects: RecentProject[] = [];
 let activeWorkspace: WorkspaceId = "graph";
 let appearancePreference: AppearancePreference = "system";
+let autoCheckUpdates = false;
+let updater: DesktopUpdater | null = null;
 let githubConnection: ReturnType<typeof connectProjectGitHub> | null = null;
 
 const githubDeviceUrl = "https://github.com/login/device";
@@ -75,9 +78,10 @@ function appearanceState(): AppearanceState {
 
 async function loadAppSettings(): Promise<void> {
   try {
-    const parsed = JSON.parse(await readFile(appSettingsFile(), "utf8")) as { appearance?: unknown };
+    const parsed = JSON.parse(await readFile(appSettingsFile(), "utf8")) as { appearance?: unknown; autoCheckUpdates?: unknown };
     if (parsed.appearance === "light" || parsed.appearance === "dark" || parsed.appearance === "system") appearancePreference = parsed.appearance;
-  } catch { appearancePreference = "system"; }
+    autoCheckUpdates = parsed.autoCheckUpdates === true;
+  } catch { appearancePreference = "system"; autoCheckUpdates = false; }
   nativeTheme.themeSource = appearancePreference;
 }
 
@@ -85,7 +89,7 @@ async function saveAppSettings(): Promise<void> {
   const file = appSettingsFile();
   const temporary = `${file}.${process.pid}.tmp`;
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(temporary, `${JSON.stringify({ appearance: appearancePreference }, null, 2)}\n`, "utf8");
+  await writeFile(temporary, `${JSON.stringify({ appearance: appearancePreference, autoCheckUpdates }, null, 2)}\n`, "utf8");
   await rename(temporary, file);
 }
 
@@ -94,6 +98,16 @@ function publishAppearance(): AppearanceState {
   window?.setBackgroundColor(state.resolved === "dark" ? "#0e1210" : "#f2f5f0");
   if (window && !window.isDestroyed()) window.webContents.send("reed:appearance-changed", state);
   return state;
+}
+
+function requireUpdater(): DesktopUpdater {
+  if (!updater) throw new Error("Updates are not ready yet");
+  return updater;
+}
+
+function checkForUpdatesFromMenu(): void {
+  sendMenuCommand({ type: "check-updates" });
+  void requireUpdater().check();
 }
 
 async function setAppearance(preference: AppearancePreference): Promise<AppearanceState> {
@@ -186,6 +200,7 @@ function applicationMenuTemplate(): MenuItemConstructorOptions[] {
     label: app.name,
     submenu: [
       { role: "about" },
+      { label: "Check for Updates…", click: checkForUpdatesFromMenu },
       { type: "separator" },
       { label: "Settings…", accelerator: "CommandOrControl+,", click: () => sendMenuCommand({ type: "preferences" }) },
       { type: "separator" },
@@ -263,7 +278,7 @@ function applicationMenuTemplate(): MenuItemConstructorOptions[] {
     { label: "Window", submenu: [{ role: "minimize" }, { role: "zoom" }, { type: "separator" }, { role: "front" }] },
     {
       role: "help",
-      submenu: [{
+      submenu: [...(process.platform === "darwin" ? [] : [{ label: "Check for Updates…", click: checkForUpdatesFromMenu }, { type: "separator" as const }]), {
         label: "Reed Help",
         click: () => { void dialog.showMessageBox({ type: "info", title: "Reed Help", message: "Reed keeps projects local and saves every edit automatically.", detail: "Use File → Project Home to switch projects without closing your current work. Use ⌘1–⌘9 and ⌘0 to move between workspaces. Project settings are under the Reed or Project menu." }); },
       }],
@@ -514,6 +529,11 @@ function registerIpc(): void {
   });
   ipcMain.handle("reed:get-appearance", () => appearanceState());
   ipcMain.handle("reed:set-appearance", (_event, preference: AppearancePreference) => setAppearance(preference));
+  ipcMain.handle("reed:update-state", () => requireUpdater().state());
+  ipcMain.handle("reed:update-check", () => requireUpdater().check());
+  ipcMain.handle("reed:update-install", () => requireUpdater().install());
+  ipcMain.handle("reed:update-release-page", () => requireUpdater().openReleasePage());
+  ipcMain.handle("reed:update-auto", (_event, enabled: boolean) => requireUpdater().setAutoCheck(enabled === true));
   ipcMain.handle("reed:reveal", async (_event, filePath: string) => {
     const root = path.resolve(requireProject().paths.root);
     const target = path.resolve(filePath);
@@ -592,7 +612,7 @@ async function createWindow(): Promise<void> {
 
 app.setName("Reed");
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
-app.on("will-quit", () => { reed?.close(); reed = null; });
+app.on("will-quit", () => { updater?.dispose(); reed?.close(); reed = null; });
 app.on("activate", () => {
   if (!window || window.isDestroyed()) void createWindow();
   else revealWindow(window);
@@ -603,6 +623,11 @@ void app.whenReady().then(async () => {
   await loadAppSettings();
   nativeTheme.on("updated", publishAppearance);
   installOfflineBoundary();
+  updater = new DesktopUpdater({
+    autoCheck: autoCheckUpdates,
+    publish: (state) => { if (window && !window.isDestroyed()) window.webContents.send("reed:update-state-changed", state); },
+    persistAutoCheck: async (enabled) => { autoCheckUpdates = enabled; await saveAppSettings(); },
+  });
   registerIpc();
   recentProjects = await loadRecentProjects();
   refreshApplicationMenu();
