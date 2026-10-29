@@ -1109,7 +1109,7 @@ function BackupSnapshots({ onRestored }: { onRestored(): Promise<void> }) {
   useEffect(() => { void load(); }, [load]);
   const restore = async (backup: BackupRecord) => {
     setWorking(true); setError(""); setNotice("");
-    try { await window.reed.restoreBackup(backup.id, backup.id); setPending(null); setNotice(`Restored ${backup.label ?? "snapshot"} from ${new Date(backup.createdAt).toLocaleString()}. The previous state was saved as “Before restore”.`); await onRestored(); await load(); }
+    try { await window.reed.restoreBackup(backup.id, backup.id); setPending(null); setNotice(`Restored ${backup.label ?? "snapshot"} from ${new Date(backup.createdAt).toLocaleString()}. The previous state was saved as “Before restore”.`); await onRestored().catch(() => undefined); await load(); }
     catch (value) { setError(message(value)); }
     finally { setWorking(false); }
   };

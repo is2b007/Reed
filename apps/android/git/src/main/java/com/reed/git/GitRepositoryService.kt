@@ -273,6 +273,7 @@ class GitRepositoryService private constructor(
     private fun comparable(snapshot: ProjectSnapshot): ProjectSnapshot = snapshot.copy(
         exportedAt = null,
         allocations = null,
+        project = snapshot.project.copy(languages = snapshot.project.languages.distinct()),
         levels = snapshot.levels.sortedBy { it.id },
         scenes = snapshot.scenes.sortedBy { it.id },
         conversations = snapshot.conversations.sortedBy { it.id }.map { graph ->
