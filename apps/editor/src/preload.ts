@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AppearanceState, MenuCommand, MutationName, ReedDesktopApi, SaveStateEvent } from "./contract.js";
+import type { AppearanceState, MenuCommand, MutationName, ReedDesktopApi, SaveStateEvent, UpdateState } from "./contract.js";
 
 const saveListeners = new Set<(event: SaveStateEvent) => void>();
 function emitSaveState(event: SaveStateEvent): void { for (const listener of saveListeners) listener(event); }
@@ -48,6 +48,11 @@ const api: ReedDesktopApi = {
   mergeProjectGitHubPullRequest: (number, strategy) => ipcRenderer.invoke("reed:github-pr-merge", number, strategy),
   getAppearance: () => ipcRenderer.invoke("reed:get-appearance"),
   setAppearance: (preference) => ipcRenderer.invoke("reed:set-appearance", preference),
+  getUpdateState: () => ipcRenderer.invoke("reed:update-state"),
+  checkForUpdates: () => ipcRenderer.invoke("reed:update-check"),
+  installUpdate: () => ipcRenderer.invoke("reed:update-install"),
+  setAutoUpdateCheck: (enabled) => ipcRenderer.invoke("reed:update-auto", enabled),
+  openUpdateRelease: () => ipcRenderer.invoke("reed:update-release-page"),
   revealInFinder: (filePath) => ipcRenderer.invoke("reed:reveal", filePath),
   listBackups: () => ipcRenderer.invoke("reed:backups"),
   restoreBackup: (backupId, confirmation) => ipcRenderer.invoke("reed:restore-backup", backupId, confirmation),
@@ -65,6 +70,11 @@ const api: ReedDesktopApi = {
     const handler = (_event: Electron.IpcRendererEvent, state: AppearanceState) => listener(state);
     ipcRenderer.on("reed:appearance-changed", handler);
     return () => ipcRenderer.removeListener("reed:appearance-changed", handler);
+  },
+  onUpdateState: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: UpdateState) => listener(state);
+    ipcRenderer.on("reed:update-state-changed", handler);
+    return () => ipcRenderer.removeListener("reed:update-state-changed", handler);
   },
 };
 

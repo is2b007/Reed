@@ -47,11 +47,12 @@ Remote Agent Access is isolated to Android's `remote` transport module and a for
 - operating-system clipboard, file picker, and notifications.
 - user-triggered Git transport for a project whose collaboration setting is enabled: `git`/`gh` child processes on desktop or the isolated JGit module on Android.
 - user-triggered, time-limited HTTPS traffic from the isolated Android Remote Agent foreground service to its configured Reed relay.
+- the desktop updater's HTTPS requests to GitHub (`api.github.com` and GitHub release downloads only), made from a dedicated in-memory Electron session when the user presses **Check for Updates** or **Install and restart**, or on the launch/12-hour schedule only after the user turns on **Check automatically**. Automatic checks are off by default, downloads are verified against the release `SHA256SUMS.txt`, and nothing installs without a click.
 
 ## Forbidden runtime I/O
 
 - direct HTTP, HTTPS, WebSocket, WebRTC, DNS, or other outbound network clients in Reed runtime code outside the explicit platform Git and Android Remote Agent transport boundaries;
-- analytics, crash upload, telemetry, update checks, license checks, and remote feature flags;
+- analytics, crash upload, telemetry, update checks the user has not requested or enabled, license checks, and remote feature flags;
 - cloud sync, remote backups, remote databases, or hosted authentication;
 - CDN fonts, icon sets, scripts, styles, images, schemas, or help content;
 - mandatory localhost web services when stdio or direct IPC can serve the same purpose;

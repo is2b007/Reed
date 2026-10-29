@@ -23,6 +23,7 @@ Reed is now an open-source, offline-first narrative design and production worksp
 - Yarn Spinner export now includes playable `.yarn` scripts, not just strings tables.
 - Android: pulling no longer overwrites edits made since the last checkpoint, and editing Final text sends it back to Rework.
 - Remote Agent Access no longer drops requests on flaky connections.
+- Desktop **Check for Updates** with one-click install and restart, plus optional automatic checks (off by default).
 - Hardened agent export paths, Git remote handling, and the packaged desktop app.
 
 ## Trust model

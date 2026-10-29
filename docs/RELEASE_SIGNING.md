@@ -54,3 +54,18 @@ The workflow produces a signed APK for direct installation and an AAB for compat
 The final itch.io job also requires `BUTLER_API_KEY`. Create the Reed itch.io project page before tagging; Butler can upload builds but cannot create the page. The workflow publishes the same signed Mac, Windows, and Android artifacts to separate platform channels after the GitHub release succeeds.
 
 Do not manually upload an unsigned replacement under a signed release filename.
+
+## Releasing before every certificate exists
+
+Each platform job checks for its own secrets, so a tag can ship before all signing material is ready:
+
+- **macOS** without `APPLE_SIGNING_CERTIFICATE_BASE64` builds an ad-hoc signed, un-notarized app. People open it the first time with right-click → Open.
+- **Windows** without `WINDOWS_CERTIFICATE_BASE64` builds an unsigned ZIP, which SmartScreen may warn about.
+- **Android** without `ANDROID_RELEASE_KEYSTORE_BASE64` is left out of the release, because a throwaway signing key would block future upgrades.
+- **itch.io** without `BUTLER_API_KEY` is skipped.
+
+The release notes gain an "Installing unsigned builds" section automatically whenever macOS or Windows ships unsigned. Adding the secrets later upgrades the next tag to signed builds with no workflow change.
+
+## Desktop updater
+
+**Check for Updates** (the Reed menu on macOS, Help on Windows, or Settings) reads the latest GitHub release and installs `Reed-<version>-macos-arm64.zip` or `Reed-<version>-windows-x64.zip`. Keep those asset names and `SHA256SUMS.txt` in every release; the updater refuses any archive that does not match its checksum. When the running copy is Developer ID signed, it also refuses an update signed by a different team. On macOS, the first self-update of an ad-hoc signed build may ask for App Management permission in System Settings → Privacy & Security.

@@ -21,8 +21,24 @@ export type SaveStateStatus = "saved" | "dirty" | "saving" | "error";
 export interface SaveStateEvent { status: SaveStateStatus; at?: string; message?: string; }
 export type AppearancePreference = "system" | "light" | "dark";
 export interface AppearanceState { preference: AppearancePreference; resolved: "light" | "dark"; }
+export type UpdateStatus = "idle" | "checking" | "current" | "available" | "downloading" | "installing" | "error";
+export interface UpdateState {
+  status: UpdateStatus;
+  currentVersion: string;
+  latestVersion?: string;
+  releaseUrl?: string;
+  notes?: string;
+  /** 0–1 while downloading. */
+  progress?: number;
+  message?: string;
+  /** Off until the user turns it on: Reed then checks GitHub for releases at launch and twice a day. */
+  autoCheck: boolean;
+  lastCheckedAt?: string;
+  /** False when this copy cannot replace itself (development build, disk image, unsupported platform). */
+  canInstall: boolean;
+}
 export type MenuCommand =
-  | { type: "new-project" | "open-project" | "show-home" | "close-project" | "preferences" | "project-settings" | "focus-search" | "toggle-navigator" | "toggle-inspector" | "create-backup" }
+  | { type: "new-project" | "open-project" | "show-home" | "close-project" | "preferences" | "check-updates" | "project-settings" | "focus-search" | "toggle-navigator" | "toggle-inspector" | "create-backup" }
   | { type: "open-recent"; root: string }
   | { type: "workspace"; workspace: WorkspaceId }
   | { type: "export"; kind: ExportKind };
@@ -74,6 +90,11 @@ export interface ReedDesktopApi {
   mergeProjectGitHubPullRequest(number: number, strategy: "merge" | "squash" | "rebase"): Promise<ProjectGitHubStatus>;
   getAppearance(): Promise<AppearanceState>;
   setAppearance(preference: AppearancePreference): Promise<AppearanceState>;
+  getUpdateState(): Promise<UpdateState>;
+  checkForUpdates(): Promise<UpdateState>;
+  installUpdate(): Promise<UpdateState>;
+  setAutoUpdateCheck(enabled: boolean): Promise<UpdateState>;
+  openUpdateRelease(): Promise<void>;
   revealInFinder(filePath: string): Promise<void>;
   listBackups(): Promise<BackupRecord[]>;
   restoreBackup(backupId: string, confirmation: string): Promise<EditorBootstrap>;
@@ -81,6 +102,7 @@ export interface ReedDesktopApi {
   onMenuCommand(listener: (command: MenuCommand) => void): () => void;
   onSaveState(listener: (event: SaveStateEvent) => void): () => void;
   onAppearanceChanged(listener: (state: AppearanceState) => void): () => void;
+  onUpdateState(listener: (state: UpdateState) => void): () => void;
 }
 
 declare global {

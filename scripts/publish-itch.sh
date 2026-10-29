@@ -16,15 +16,22 @@ MAC_DMG="$RELEASE_DIR/Reed-$VERSION-macos-arm64.dmg"
 WINDOWS_ZIP="$RELEASE_DIR/Reed-$VERSION-windows-x64.zip"
 ANDROID_APK="$RELEASE_DIR/Reed-$VERSION-android.apk"
 
-for artifact in "$MAC_DMG" "$WINDOWS_ZIP" "$ANDROID_APK"; do
+# macOS and Windows are required; Android ships only when the release keystore was configured.
+for artifact in "$MAC_DMG" "$WINDOWS_ZIP"; do
   test -f "$artifact" || {
-    echo "Missing signed release artifact: $artifact" >&2
+    echo "Missing release artifact: $artifact" >&2
     exit 1
   }
 done
 
+CHANNELS="macos-arm64, windows-x64"
 butler push "$MAC_DMG" "$TARGET:macos-arm64" --userversion "$VERSION"
 butler push "$WINDOWS_ZIP" "$TARGET:windows-x64" --userversion "$VERSION"
-butler push "$ANDROID_APK" "$TARGET:android" --userversion "$VERSION"
+if test -f "$ANDROID_APK"; then
+  butler push "$ANDROID_APK" "$TARGET:android" --userversion "$VERSION"
+  CHANNELS="$CHANNELS, android"
+else
+  echo "No Android APK in $RELEASE_DIR; leaving the android channel unchanged." >&2
+fi
 
-echo "Published Reed $VERSION to https://$ACCOUNT.itch.io/$PROJECT (channels: macos-arm64, windows-x64, android)"
+echo "Published Reed $VERSION to https://$ACCOUNT.itch.io/$PROJECT (channels: $CHANNELS)"

@@ -169,12 +169,13 @@ The interface also includes recent projects, project settings, keyboard workspac
 
 ## Offline by design
 
-SQLite in WAL mode is the canonical source of truth. Reed has no account, telemetry, hosted project store, cloud configuration, update checker, remote fonts/assets, or embedded LLM.
+SQLite in WAL mode is the canonical source of truth. Reed has no account, telemetry, hosted project store, cloud configuration, background update checker, remote fonts/assets, or embedded LLM.
 
 The only network boundaries are actions a person explicitly starts:
 
 1. a labelled Git or GitHub action after collaboration is enabled for that project; or
-2. a time-limited Android Remote Agent Access session with a persistent Disconnect notification.
+2. a time-limited Android Remote Agent Access session with a persistent Disconnect notification; or
+3. **Check for Updates** on desktop, which asks GitHub for the latest release. Automatic checks stay off unless you turn them on in Settings, and nothing installs without your OK.
 
 Turning those features off leaves a complete local writing, playtesting, localization, backup, and export workflow. See the automated [offline contract](docs/OFFLINE_CONTRACT.md).
 
