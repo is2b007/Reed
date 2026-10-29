@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${REED_RELEASE_VERSION:-0.2.0}"
+VERSION="${REED_RELEASE_VERSION:-$(node -p "require('./package.json').version")}"
 TARGET="${ITCH_TARGET:-maniadesign/reed}"
 RELEASE_DIR="${REED_RELEASE_DIR:-release}"
 ACCOUNT="${TARGET%%/*}"

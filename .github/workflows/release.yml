@@ -7,7 +7,7 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -82,10 +82,11 @@ jobs:
         run: pnpm desktop:make:mac
       - name: Normalize and verify artifacts
         run: |
+          VERSION="$(node -p "require('./package.json').version")"
           mkdir -p release
-          cp "$(find apps/editor/out/make -type f -name '*.dmg' -print -quit)" release/Reed-0.2.0-macos-arm64.dmg
-          cp "$(find apps/editor/out/make -type f -name '*.zip' -print -quit)" release/Reed-0.2.0-macos-arm64.zip
-          hdiutil verify release/Reed-0.2.0-macos-arm64.dmg
+          cp "$(find apps/editor/out/make -type f -name '*.dmg' -print -quit)" "release/Reed-$VERSION-macos-arm64.dmg"
+          cp "$(find apps/editor/out/make -type f -name '*.zip' -print -quit)" "release/Reed-$VERSION-macos-arm64.zip"
+          hdiutil verify "release/Reed-$VERSION-macos-arm64.dmg"
           codesign --verify --deep --strict --verbose=2 apps/editor/out/Reed-darwin-arm64/Reed.app
           xcrun stapler validate apps/editor/out/Reed-darwin-arm64/Reed.app
           spctl --assess --type execute --verbose=4 apps/editor/out/Reed-darwin-arm64/Reed.app
@@ -132,7 +133,8 @@ jobs:
           New-Item -ItemType Directory -Force release | Out-Null
           $zip = Get-ChildItem apps/editor/out/make -Recurse -Filter *.zip | Select-Object -First 1
           if (-not $zip) { throw "Windows ZIP was not produced" }
-          Copy-Item $zip.FullName release/Reed-0.2.0-windows-x64.zip
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          Copy-Item $zip.FullName "release/Reed-$version-windows-x64.zip"
           $signtool = (Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe | Where-Object FullName -Match 'x64' | Select-Object -Last 1).FullName
           if (-not $signtool) { throw "signtool.exe was not found" }
           Get-ChildItem apps/editor/out/Reed-win32-x64 -Recurse -Include *.exe,*.dll,*.node | ForEach-Object { & $signtool verify /pa /all /v $_.FullName; if ($LASTEXITCODE -ne 0) { throw "Invalid signature: $($_.FullName)" } }
@@ -172,11 +174,12 @@ jobs:
         run: ./gradlew testDebugUnitTest lintDebug assembleRelease bundleRelease
       - name: Normalize and verify artifacts
         run: |
+          VERSION="$(node -p "require('./package.json').version")"
           mkdir -p release
-          cp apps/android/app/build/outputs/apk/release/app-release.apk release/Reed-0.2.0-android.apk
-          cp apps/android/app/build/outputs/bundle/release/app-release.aab release/Reed-0.2.0-android.aab
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs release/Reed-0.2.0-android.apk
-          jarsigner -verify -verbose -certs release/Reed-0.2.0-android.aab
+          cp apps/android/app/build/outputs/apk/release/app-release.apk "release/Reed-$VERSION-android.apk"
+          cp apps/android/app/build/outputs/bundle/release/app-release.aab "release/Reed-$VERSION-android.aab"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "release/Reed-$VERSION-android.apk"
+          jarsigner -verify -verbose -certs "release/Reed-$VERSION-android.aab"
       - uses: actions/upload-artifact@v6
         with:
           name: reed-android
@@ -188,6 +191,8 @@ jobs:
     needs: [macos, windows, android]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v7
@@ -201,7 +206,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release/* --verify-tag --title "Reed $GITHUB_REF_NAME" --notes-file docs/RELEASE_NOTES_0.2.0.md
+          VERSION="$(node -p "require('./package.json').version")"
+          test "$GITHUB_REF_NAME" = "v$VERSION" || { echo "Tag $GITHUB_REF_NAME does not match package.json version $VERSION" >&2; exit 1; }
+          gh release create "$GITHUB_REF_NAME" release/* --verify-tag --title "Reed $GITHUB_REF_NAME" --notes-file "docs/RELEASE_NOTES_$VERSION.md"
 
   itch:
     name: Publish itch.io channels
@@ -223,6 +230,5 @@ jobs:
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
           ITCH_TARGET: maniadesign/reed
-          REED_RELEASE_VERSION: "0.2.0"
           REED_RELEASE_DIR: release
-        run: ./scripts/publish-itch.sh
+        run: REED_RELEASE_VERSION="$(node -p "require('./package.json').version")" ./scripts/publish-itch.sh
