@@ -41,15 +41,17 @@ const appleTeamId = process.env.APPLE_TEAM_ID?.trim();
 const windowsCertificateFile = process.env.WINDOWS_CERTIFICATE_FILE?.trim();
 const windowsCertificatePassword = process.env.WINDOWS_CERTIFICATE_PASSWORD;
 
-const osxNotarize: NonNullable<ForgeConfig["packagerConfig"]>["osxNotarize"] = appleKeychainProfile
-  ? { keychainProfile: appleKeychainProfile }
+// notarytool credential arguments. Notarization runs in postPackage instead of through
+// @electron/notarize so a stapling failure (CloudKit drops on CI runners) does not fail the build.
+const notarytoolCredentials: string[] | undefined = appleKeychainProfile
+  ? ["--keychain-profile", appleKeychainProfile]
   : appleApiKey && appleApiKeyId && appleApiIssuer
-    ? { appleApiKey, appleApiKeyId, appleApiIssuer }
+    ? ["--key", appleApiKey, "--key-id", appleApiKeyId, "--issuer", appleApiIssuer]
     : appleId && appleIdPassword && appleTeamId
-      ? { appleId, appleIdPassword, teamId: appleTeamId }
+      ? ["--apple-id", appleId, "--password", appleIdPassword, "--team-id", appleTeamId]
       : undefined;
 
-if (productionRelease && targetPlatform === "darwin" && (!appleSigningIdentity || !osxNotarize)) {
+if (productionRelease && targetPlatform === "darwin" && (!appleSigningIdentity || !notarytoolCredentials)) {
   throw new Error(
     "Public macOS releases require APPLE_SIGNING_IDENTITY and notarization credentials " +
       "(APPLE_NOTARY_KEYCHAIN_PROFILE, APPLE_API_KEY + APPLE_API_KEY_ID + APPLE_API_ISSUER, or " +
@@ -99,6 +101,35 @@ const includeNativeRuntime: NonNullable<ForgeConfig["packagerConfig"]>["afterPru
   },
 ];
 
+/** Notarizes the signed app (failing the build if Apple rejects it), then staples the ticket.
+ * Stapling needs Apple's CloudKit, which GitHub's macOS runners often cannot reach; an unstapled
+ * notarized app still opens, because Gatekeeper fetches the ticket online on first launch. */
+async function notarizeAndStaple(appPath: string): Promise<boolean> {
+  const archive = path.join(signatureValidationDirectory, "Reed-notarize.zip");
+  execFileSync("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appPath, archive]);
+  const output = execFileSync(
+    "/usr/bin/xcrun",
+    ["notarytool", "submit", archive, ...notarytoolCredentials!, "--wait", "--timeout", "2h", "--output-format", "json"],
+    { encoding: "utf8" },
+  );
+  await rm(archive, { force: true });
+  const submission = JSON.parse(output) as { id?: string; status?: string };
+  if (submission.status !== "Accepted") {
+    throw new Error(`Apple notarization ${submission.id ?? ""} finished as ${submission.status ?? "unknown"}; run notarytool log for details.`);
+  }
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      execFileSync("/usr/bin/xcrun", ["stapler", "staple", appPath], { stdio: "inherit" });
+      return true;
+    } catch {
+      console.warn(`Stapling attempt ${attempt} of 5 could not reach Apple.`);
+      if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, attempt * 15_000));
+    }
+  }
+  console.warn("::warning::Reed is notarized but not stapled; macOS will check the ticket online on first launch.");
+  return false;
+}
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
@@ -123,7 +154,6 @@ const config: ForgeConfig = {
           preEmbedProvisioningProfile: false,
           optionsForFile: () => ({ hardenedRuntime: false, timestamp: "none" }),
         },
-    osxNotarize: productionRelease ? osxNotarize : undefined,
     win32metadata: {
       CompanyName: "Kosta Canatselis",
       FileDescription: "Reed narrative design workspace",
@@ -154,12 +184,12 @@ const config: ForgeConfig = {
         }
         await rm(signatureValidationDirectory, { recursive: true, force: true });
         await mkdir(signatureValidationDirectory, { recursive: true });
+        const stapled = productionRelease && await notarizeAndStaple(appPath);
         execFileSync("/usr/bin/ditto", ["--noextattr", "--noqtn", appPath, signatureValidationApp]);
         execFileSync("/bin/chmod", ["-R", "u+w", signatureValidationApp]);
         execFileSync("/usr/bin/xattr", ["-cr", signatureValidationApp]);
         execFileSync("/usr/bin/codesign", ["--verify", "--deep", "--strict", signatureValidationApp], { stdio: "inherit" });
-        if (productionRelease) {
-          // spctl checks the stapled ticket offline; `stapler validate` asks CloudKit and drops on CI runners.
+        if (stapled) {
           execFileSync("/usr/sbin/spctl", ["--assess", "--type", "execute", "--verbose=4", signatureValidationApp], { stdio: "inherit" });
         }
         await rm(signatureValidationDirectory, { recursive: true, force: true });

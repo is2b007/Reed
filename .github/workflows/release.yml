@@ -98,7 +98,7 @@ jobs:
           cp "$(find apps/editor/out/make -type f -name '*.zip' -print -quit)" "release/Reed-$VERSION-macos-arm64.zip"
           hdiutil verify "release/Reed-$VERSION-macos-arm64.dmg"
           codesign --verify --deep --strict --verbose=2 apps/editor/out/Reed-darwin-arm64/Reed.app
-          if [ "$SIGNED" = "true" ]; then
+          if [ "$SIGNED" = "true" ] && [ -f apps/editor/out/Reed-darwin-arm64/Reed.app/Contents/CodeResources ]; then
             spctl --assess --type execute --verbose=4 apps/editor/out/Reed-darwin-arm64/Reed.app
           fi
       - uses: actions/upload-artifact@v6
