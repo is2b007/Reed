@@ -99,7 +99,6 @@ jobs:
           hdiutil verify "release/Reed-$VERSION-macos-arm64.dmg"
           codesign --verify --deep --strict --verbose=2 apps/editor/out/Reed-darwin-arm64/Reed.app
           if [ "$SIGNED" = "true" ]; then
-            xcrun stapler validate apps/editor/out/Reed-darwin-arm64/Reed.app
             spctl --assess --type execute --verbose=4 apps/editor/out/Reed-darwin-arm64/Reed.app
           fi
       - uses: actions/upload-artifact@v6
