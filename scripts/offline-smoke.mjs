@@ -126,7 +126,7 @@ try {
     if (!editorMain.includes(protocol)) throw new Error(`Editor offline boundary does not cover ${protocol}`);
   }
   const updater = await readFile(path.join(editorSource, "updater.ts"), "utf8");
-  if (!updater.includes('session.fromPartition("reed-updates"') || !updater.includes("isAllowedUpdateUrl(url)")) throw new Error("The desktop updater must use its own session and the GitHub host allowlist");
+  if (!updater.includes('session.fromPartition("reed-updates"') || !updater.includes("isAllowedUpdateUrl(url)") || !updater.includes("cancel: !isAllowedUpdateUrl(details.url)")) throw new Error("The desktop updater must use its own session and the GitHub host allowlist");
   if (!editorMain.includes("autoCheckUpdates = parsed.autoCheckUpdates === true")) throw new Error("Automatic update checks must stay off unless the user enabled them");
   process.stdout.write("Offline smoke passed: core, CLI, MCP, backups, local Git/PR handoff, Unicode exports, and editor network boundary.\n");
 } finally {

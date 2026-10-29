@@ -13,7 +13,7 @@ describe("collaboration and appearance regressions", () => {
     expect(app).toContain("Enabled for this project");
     expect(app).toContain("Push and open PR");
     expect(app).toContain("Merge on GitHub");
-    expect(app).toContain("Nothing runs in the background");
+    expect(app).toContain("never force-pushes or overwrites newer remote work");
     expect(main).toContain('ipcMain.handle("reed:github-status"');
     expect(main).toContain('pullRequestProvider === "github" ? inspectProjectGitHub');
     expect(git).toContain("GH_PROMPT_DISABLED");

@@ -213,9 +213,13 @@ export class DesktopUpdater {
 
   private async get(url: string, headers: Record<string, string> = {}): Promise<Response> {
     if (!isAllowedUpdateUrl(url)) throw new Error("Refusing to contact an unexpected update host");
-    this.network ??= session.fromPartition("reed-updates", { cache: false });
+    if (!this.network) {
+      this.network = session.fromPartition("reed-updates", { cache: false });
+      // Chromium checks every request and redirect hop here. Electron's session.fetch reports an
+      // empty response.url, and redirect: "manual" cancels the request, so neither can be used.
+      this.network.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !isAllowedUpdateUrl(details.url) }));
+    }
     const response = await this.network.fetch(url, { headers: { "User-Agent": `Reed/${app.getVersion()}`, ...headers }, redirect: "follow" });
-    if (!isAllowedUpdateUrl(response.url)) throw new Error("The update was redirected to an unexpected host");
     if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
     return response;
   }

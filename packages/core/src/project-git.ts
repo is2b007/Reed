@@ -107,6 +107,16 @@ export interface ProjectPullRequestHandoffInput {
   pullRequestNumber?: number;
 }
 
+export type ProjectGitAutoSyncOutcome = "unavailable" | "not-initialized" | "current" | "committed" | "pushed" | "local-only" | "remote-ahead" | "offline" | "push-failed";
+
+export interface ProjectGitAutoSyncResult {
+  outcome: ProjectGitAutoSyncOutcome;
+  committed: boolean;
+  pushed: boolean;
+  message: string;
+  status: ProjectGitStatus;
+}
+
 export interface ProjectGitCheckpointResult {
   created: boolean;
   commit: ProjectGitCommit | null;
@@ -120,12 +130,13 @@ interface GitResult {
   code: number | string | null;
 }
 
-async function runGit(root: string, args: string[]): Promise<GitResult> {
+async function runGit(root: string, args: string[], options: { timeout?: number } = {}): Promise<GitResult> {
   try {
     const result = await execFileAsync("git", args, {
       cwd: root,
       encoding: "utf8",
       maxBuffer: 4 * 1024 * 1024,
+      ...(options.timeout ? { timeout: options.timeout } : {}),
       env: { ...process.env, GIT_TERMINAL_PROMPT: "0", LC_ALL: "C" },
     });
     return { ok: true, stdout: result.stdout, stderr: result.stderr, code: 0 };
@@ -641,4 +652,44 @@ export async function setProjectGitRemote(root: string, url: string | null): Pro
     : existing.ok ? await runGit(projectRoot, ["remote", "remove", "origin"]) : { ok: true, stdout: "", stderr: "", code: 0 };
   if (!result.ok) throw new ReedError("Could not update the local Git remote", "GIT_REMOTE_FAILED", { stderr: cleanOutput(result.stderr) });
   return inspectProjectGit(projectRoot);
+}
+
+const autoSyncNetworkTimeout = 60_000;
+
+export function autoSyncCheckpointName(now = new Date()): string {
+  return `Autosave ${now.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
+/**
+ * Commits any pending story changes, then publishes them to origin when one is configured.
+ * Never force-pushes, merges, or touches the working tree when the remote has newer commits.
+ */
+export async function autoSyncProjectGit(root: string, options: { push: boolean; now?: Date }): Promise<ProjectGitAutoSyncResult> {
+  const projectRoot = await canonicalPath(root);
+  const initial = await inspectProjectGit(projectRoot);
+  if (!initial.available) return { outcome: "unavailable", committed: false, pushed: false, message: initial.message, status: initial };
+  if (!initial.initialized) return { outcome: "not-initialized", committed: false, pushed: false, message: "Local history is off for this project.", status: initial };
+  const checkpoint = initial.clean
+    ? { created: false, status: initial }
+    : await checkpointProjectGit(projectRoot, autoSyncCheckpointName(options.now));
+  const committed = checkpoint.created;
+  let status = checkpoint.status;
+  const result = (outcome: ProjectGitAutoSyncOutcome, message: string, pushed = false): ProjectGitAutoSyncResult => ({ outcome, committed, pushed, message, status });
+  if (!status.remote) return result("local-only", committed ? "Autosaved a local checkpoint. Add a remote to push automatically." : "Local history is up to date.");
+  if (!options.push) return result(committed ? "committed" : "current", committed ? "Autosaved a local checkpoint." : "Local history is up to date.");
+  const fetched = await runGit(projectRoot, ["fetch", "--quiet", "origin"], { timeout: autoSyncNetworkTimeout });
+  if (!fetched.ok) return result("offline", "Could not reach the remote. Reed will try again later.");
+  status = await inspectProjectGit(projectRoot);
+  const branch = status.branch ?? "main";
+  const remoteBranch = await runGit(projectRoot, ["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${branch}`]);
+  if (remoteBranch.ok && !status.upstream) {
+    const behind = await runGit(projectRoot, ["rev-list", "--count", `HEAD..origin/${branch}`]);
+    if (!behind.ok || Number(cleanOutput(behind.stdout)) > 0) return result("remote-ahead", `The remote ${branch} branch has commits this Mac does not. Review them in History before pushing.`);
+  }
+  if (status.behind > 0) return result("remote-ahead", `The remote has ${status.behind} newer ${status.behind === 1 ? "checkpoint" : "checkpoints"}. Review them in History; Reed will not overwrite them.`);
+  if (status.upstream && status.ahead === 0) return result(committed ? "committed" : "current", committed ? "Autosaved a checkpoint." : "Everything is pushed.");
+  const pushed = await runGit(projectRoot, ["push", "--set-upstream", "origin", `refs/heads/${branch}:refs/heads/${branch}`], { timeout: autoSyncNetworkTimeout });
+  if (!pushed.ok) return result("push-failed", `Could not push: ${cleanOutput(pushed.stderr).split("\n").pop() || "the remote refused the push"}`);
+  status = await inspectProjectGit(projectRoot);
+  return result("pushed", "Autosaved and pushed.", true);
 }

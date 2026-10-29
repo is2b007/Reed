@@ -203,6 +203,7 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   makers: [new MakerZIP({}, ["darwin", "win32"]), new MakerDMG({
     format: "ULFO",
+    icon: path.join(configDirectory, "assets", "Reed.icns"),
     contents: (options) => {
       mkdirSync(dmgStagingDirectory, { recursive: true });
       execFileSync("/usr/bin/ditto", ["--noextattr", "--noqtn", options.appPath, dmgStagingApp]);
