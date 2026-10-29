@@ -51,6 +51,7 @@ jobs:
           node-version: 22.22.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm build:runtime
       - name: Import Developer ID certificate
         if: env.SIGNED == 'true'
         env:
@@ -124,6 +125,7 @@ jobs:
           node-version: 22.22.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm build:runtime
       - name: Prepare signing certificate
         if: env.SIGNED == 'true'
         shell: pwsh
