@@ -79,3 +79,35 @@ describe("game localization exports", () => {
     expect(contents).toContain("<source>Enter the gate?</source>");
   });
 });
+
+describe("Yarn Spinner scripts", () => {
+  it("writes .yarn scripts whose line tags match the strings tables", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "reed-yarn-"));
+    const project = await ReedProject.create(root, { name: "Yarn", slug: "yarn-story", languages: ["en", "fr"], defaultLanguage: "en" });
+    try {
+      const hero = (await project.upsertCharacter({ name: "Ada", displayNames: {}, isPlayer: false, portraitPath: null, description: "", actorNotes: "", voiceNotes: "" })).value;
+      const scene = (await project.createScene({ name: "Dock", slug: "dock" })).value;
+      const conversation = (await project.createConversation({ sceneId: scene.id, title: "Hello" })).value;
+      const start = conversation.nodes[0];
+      if (!start) throw new Error("missing start");
+      const line = (await project.addNode({ conversationId: conversation.id, speakerCharacterId: hero.id, text: "Hi #there {friend}" })).value;
+      const choice = (await project.addNode({ conversationId: conversation.id, kind: "choice", text: "Bye", isTerminal: true })).value;
+      await project.setNodeText({ lineId: choice.lineId, language: "en", text: "Goodbye then.", menuText: "Bye" });
+      await project.linkNodes({ originNodeId: start.id, destinationNodeId: line.id, priority: 0, force: false });
+      await project.linkNodes({ originNodeId: line.id, destinationNodeId: choice.id, priority: 0, force: false });
+      const result = await exportGameData(project, { format: "yarn-spinner" });
+      const script = await readFile(result.filePaths.find((file) => file.endsWith("dock.yarn")) ?? "", "utf8");
+      expect(script).toContain(`Ada: Hi \\#there \\{friend\\} #line:${line.lineId}`);
+      expect(script).toContain(`-> Bye #line:${choice.lineId}.menu`);
+      expect(script).toContain(`Goodbye then. #line:${choice.lineId}`);
+      expect(script).toMatch(/<<jump C\d+_E\d+>>/u);
+      const strings = await readFile(result.filePaths.find((file) => file.endsWith(".fr.strings.csv")) ?? "", "utf8");
+      const row = strings.split("\n").find((value) => value.includes(`"line:${line.lineId}"`)) ?? "";
+      const lineNumber = script.split("\n").findIndex((value) => value.includes(`#line:${line.lineId}`)) + 1;
+      expect(row).toContain(`"dock.yarn"`);
+      expect(row).toContain(`"${lineNumber}"`);
+    } finally {
+      project.close();
+    }
+  });
+});
