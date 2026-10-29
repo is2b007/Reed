@@ -107,10 +107,14 @@ try {
   const godotCsv = await readFile(path.join(projectRoot, "exports", "integrations", "godot", "the-salt-gate.godot.csv"), "utf8");
   if (!godotCsv.includes('"keys","en","el"')) throw new Error("Godot localization export was not produced offline");
 
+  const editorSource = path.join(repository, "apps", "editor", "src");
+  const updaterFiles = new Set(["updater.ts", "update-logic.ts", "update-logic.test.ts"].map((name) => path.join(editorSource, name)));
   const forbidden = /\bfetch\s*\(|new\s+WebSocket\b|EventSource\b|sendBeacon\b|electron-updater|autoUpdater|@sentry|posthog|amplitude|url\(\s*["']?https?:|<(?:script|link|img)[^>]+(?:src|href)=["']https?:/iu;
   for (const area of [path.join(repository, "apps"), path.join(repository, "packages")]) {
     for (const file of await sourceFiles(area)) {
       if (file.startsWith(path.join(repository, "apps", "relay") + path.sep)) continue;
+      // The opt-in desktop updater is the editor's one sanctioned HTTPS client; its guards are asserted below.
+      if (updaterFiles.has(file)) continue;
       const text = await readFile(file, "utf8");
       if (forbidden.test(text)) throw new Error(`Forbidden runtime networking or remote asset reference in ${path.relative(repository, file)}`);
     }
@@ -121,6 +125,9 @@ try {
   for (const protocol of ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"]) {
     if (!editorMain.includes(protocol)) throw new Error(`Editor offline boundary does not cover ${protocol}`);
   }
+  const updater = await readFile(path.join(editorSource, "updater.ts"), "utf8");
+  if (!updater.includes('session.fromPartition("reed-updates"') || !updater.includes("isAllowedUpdateUrl(url)")) throw new Error("The desktop updater must use its own session and the GitHub host allowlist");
+  if (!editorMain.includes("autoCheckUpdates = parsed.autoCheckUpdates === true")) throw new Error("Automatic update checks must stay off unless the user enabled them");
   process.stdout.write("Offline smoke passed: core, CLI, MCP, backups, local Git/PR handoff, Unicode exports, and editor network boundary.\n");
 } finally {
   await rm(projectRoot, { recursive: true, force: true });
