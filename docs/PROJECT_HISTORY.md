@@ -33,7 +33,7 @@ Once connected, the History workspace can:
 - approve, request changes, or leave a review comment;
 - merge with merge-commit, squash, or rebase after a confirmation.
 
-Every remote operation has its own visible button. Reed performs no background status refresh, authentication, fetch, push, polling, or synchronization. Turning GitHub off returns the project to completely local behavior without deleting its local repository or checkpoints.
+Every remote operation has its own visible button. The one exception is Git autosave, on by default in Reed settings: every few minutes (and when a project closes or Reed quits) it commits the open story to local history, then fetches and pushes the branch when GitHub is on and the remote has nothing newer. It never pulls, merges, or force-pushes. Turn it off for fully manual history. Turning GitHub off returns the project to completely local behavior without deleting its local repository or checkpoints.
 
 ## Team pull-request workflow
 

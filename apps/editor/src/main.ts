@@ -28,8 +28,9 @@ import {
   setProjectGitRemote,
   validateProject,
 } from "@reed/core";
-import type { AppearancePreference, AppearanceState, EditorBootstrap, ExportKind, MenuCommand, MutationName, WorkspaceId } from "./contract.js";
+import type { AppearancePreference, AppearanceState, AutoSyncSettings, EditorBootstrap, ExportKind, MenuCommand, MutationName, WorkspaceId } from "./contract.js";
 import { DesktopUpdater } from "./updater.js";
+import { AutoSyncController, defaultAutoSyncSettings, parseAutoSyncSettings } from "./auto-sync.js";
 import { forgetRecentProject, parseRecentProjects, upsertRecentProject, type RecentProject } from "./recent-projects.js";
 
 let window: BrowserWindow | null = null;
@@ -39,6 +40,10 @@ let activeWorkspace: WorkspaceId = "graph";
 let appearancePreference: AppearancePreference = "system";
 let autoCheckUpdates = false;
 let updater: DesktopUpdater | null = null;
+let autoSyncSettings: AutoSyncSettings = defaultAutoSyncSettings;
+let autoSync: AutoSyncController | null = null;
+let gitQueue: Promise<unknown> = Promise.resolve();
+let finishedQuitAutoSave = false;
 let githubConnection: ReturnType<typeof connectProjectGitHub> | null = null;
 
 const githubDeviceUrl = "https://github.com/login/device";
@@ -78,10 +83,11 @@ function appearanceState(): AppearanceState {
 
 async function loadAppSettings(): Promise<void> {
   try {
-    const parsed = JSON.parse(await readFile(appSettingsFile(), "utf8")) as { appearance?: unknown; autoCheckUpdates?: unknown };
+    const parsed = JSON.parse(await readFile(appSettingsFile(), "utf8")) as { appearance?: unknown; autoCheckUpdates?: unknown; autoSync?: unknown };
     if (parsed.appearance === "light" || parsed.appearance === "dark" || parsed.appearance === "system") appearancePreference = parsed.appearance;
     autoCheckUpdates = parsed.autoCheckUpdates === true;
-  } catch { appearancePreference = "system"; autoCheckUpdates = false; }
+    autoSyncSettings = parseAutoSyncSettings(parsed.autoSync);
+  } catch { appearancePreference = "system"; autoCheckUpdates = false; autoSyncSettings = defaultAutoSyncSettings; }
   nativeTheme.themeSource = appearancePreference;
 }
 
@@ -89,7 +95,7 @@ async function saveAppSettings(): Promise<void> {
   const file = appSettingsFile();
   const temporary = `${file}.${process.pid}.tmp`;
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(temporary, `${JSON.stringify({ appearance: appearancePreference, autoCheckUpdates }, null, 2)}\n`, "utf8");
+  await writeFile(temporary, `${JSON.stringify({ appearance: appearancePreference, autoCheckUpdates, autoSync: autoSyncSettings }, null, 2)}\n`, "utf8");
   await rename(temporary, file);
 }
 
@@ -103,6 +109,11 @@ function publishAppearance(): AppearanceState {
 function requireUpdater(): DesktopUpdater {
   if (!updater) throw new Error("Updates are not ready yet");
   return updater;
+}
+
+function requireAutoSync(): AutoSyncController {
+  if (!autoSync) throw new Error("Autosave is not ready yet");
+  return autoSync;
 }
 
 function checkForUpdatesFromMenu(): void {
@@ -309,7 +320,16 @@ async function clearRecentProjects(): Promise<RecentProject[]> {
   return recentProjects;
 }
 
+/** One Git operation at a time, so timed autosaves never collide with a checkpoint or push the writer started. */
+function serializeGit<T>(work: () => Promise<T>): Promise<T> {
+  const next = gitQueue.then(work, work);
+  gitQueue = next.catch(() => undefined);
+  return next;
+}
+
 async function closeCurrentProject(notifyRenderer: boolean): Promise<void> {
+  await autoSync?.run({ push: false });
+  autoSync?.projectChanged();
   reed?.close();
   reed = null;
   activeWorkspace = "graph";
@@ -358,6 +378,8 @@ async function openProject(root: string): Promise<EditorBootstrap> {
   const resolvedRoot = path.resolve(root);
   if (reed?.paths.root !== resolvedRoot) {
     const next = await ReedProject.open(resolvedRoot);
+    if (reed) await autoSync?.run({ push: false });
+    autoSync?.projectChanged();
     reed?.close();
     reed = next;
   }
@@ -464,28 +486,28 @@ function registerIpc(): void {
     await exportProjectJson(project);
     return inspectProjectGit(project.paths.root);
   });
-  ipcMain.handle("reed:git-init", async () => {
+  ipcMain.handle("reed:git-init", () => serializeGit(async () => {
     const project = requireProject();
     await exportProjectJson(project);
     await initializeProjectGit(project.paths.root);
     return checkpointProjectGit(project.paths.root, "Initial Reed story");
-  });
-  ipcMain.handle("reed:git-checkpoint", async (_event, message: string) => {
+  }));
+  ipcMain.handle("reed:git-checkpoint", (_event, message: string) => serializeGit(async () => {
     const project = requireProject();
     await exportProjectJson(project);
     return checkpointProjectGit(project.paths.root, message);
-  });
-  ipcMain.handle("reed:git-branch", async (_event, name: string) => {
+  }));
+  ipcMain.handle("reed:git-branch", (_event, name: string) => serializeGit(async () => {
     const project = requireProject();
     await exportProjectJson(project);
     return createProjectGitBranch(project.paths.root, name);
-  });
-  ipcMain.handle("reed:git-pr-handoff", async (_event, input: Parameters<typeof createProjectPullRequestHandoff>[1]) => {
+  }));
+  ipcMain.handle("reed:git-pr-handoff", (_event, input: Parameters<typeof createProjectPullRequestHandoff>[1]) => serializeGit(async () => {
     const project = requireProject();
     await exportProjectJson(project);
     return createProjectPullRequestHandoff(project.paths.root, input);
-  });
-  ipcMain.handle("reed:git-remote", (_event, url: string | null) => setProjectGitRemote(requireProject().paths.root, url));
+  }));
+  ipcMain.handle("reed:git-remote", (_event, url: string | null) => serializeGit(() => setProjectGitRemote(requireProject().paths.root, url)));
   ipcMain.handle("reed:github-status", () => {
     const project = requireProject();
     return project.getProject().pullRequestProvider === "github" ? inspectProjectGitHub(project.paths.root) : disabledProjectGitHubStatus();
@@ -494,23 +516,23 @@ function registerIpc(): void {
     try { return await connectGitHubFromEditor(); }
     catch (error) { throw new Error(ipcErrorMessage(error)); }
   });
-  ipcMain.handle("reed:github-create-repository", async (_event, input: Parameters<typeof createProjectGitHubRepository>[1]) => {
+  ipcMain.handle("reed:github-create-repository", (_event, input: Parameters<typeof createProjectGitHubRepository>[1]) => serializeGit(async () => {
     const project = requireGitHubProject();
     await exportProjectJson(project);
     return createProjectGitHubRepository(project.paths.root, input);
-  });
-  ipcMain.handle("reed:github-connect-repository", (_event, repository: string) => connectProjectGitHubRepository(requireGitHubProject().paths.root, repository));
-  ipcMain.handle("reed:github-fetch", () => fetchProjectGitHub(requireGitHubProject().paths.root));
-  ipcMain.handle("reed:github-push", async () => {
+  }));
+  ipcMain.handle("reed:github-connect-repository", (_event, repository: string) => serializeGit(() => connectProjectGitHubRepository(requireGitHubProject().paths.root, repository)));
+  ipcMain.handle("reed:github-fetch", () => serializeGit(() => fetchProjectGitHub(requireGitHubProject().paths.root)));
+  ipcMain.handle("reed:github-push", () => serializeGit(async () => {
     const project = requireGitHubProject();
     await exportProjectJson(project);
     return pushProjectGitHub(project.paths.root);
-  });
-  ipcMain.handle("reed:github-pr-create", async (_event, input: Parameters<typeof createProjectGitHubPullRequest>[1]) => {
+  }));
+  ipcMain.handle("reed:github-pr-create", (_event, input: Parameters<typeof createProjectGitHubPullRequest>[1]) => serializeGit(async () => {
     const project = requireGitHubProject();
     await exportProjectJson(project);
     return createProjectGitHubPullRequest(project.paths.root, input);
-  });
+  }));
   ipcMain.handle("reed:github-pr-review", (_event, input: Parameters<typeof reviewProjectGitHubPullRequest>[1]) => reviewProjectGitHubPullRequest(requireGitHubProject().paths.root, input));
   ipcMain.handle("reed:github-pr-merge", (_event, number: number, strategy: "merge" | "squash" | "rebase") => mergeProjectGitHubPullRequest(requireGitHubProject().paths.root, number, strategy));
   ipcMain.handle("reed:backups", () => requireProject().listBackups());
@@ -534,6 +556,9 @@ function registerIpc(): void {
   ipcMain.handle("reed:update-install", () => requireUpdater().install());
   ipcMain.handle("reed:update-release-page", () => requireUpdater().openReleasePage());
   ipcMain.handle("reed:update-auto", (_event, enabled: boolean) => requireUpdater().setAutoCheck(enabled === true));
+  ipcMain.handle("reed:auto-sync-state", () => requireAutoSync().state());
+  ipcMain.handle("reed:auto-sync-set", (_event, settings: Partial<AutoSyncSettings>) => requireAutoSync().configure(settings ?? {}));
+  ipcMain.handle("reed:auto-sync-run", () => requireAutoSync().run({ manual: true }));
   ipcMain.handle("reed:reveal", async (_event, filePath: string) => {
     const root = path.resolve(requireProject().paths.root);
     const target = path.resolve(filePath);
@@ -612,7 +637,15 @@ async function createWindow(): Promise<void> {
 
 app.setName("Reed");
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
-app.on("will-quit", () => { updater?.dispose(); reed?.close(); reed = null; });
+app.on("before-quit", (event) => {
+  // Commit the open story locally once before quitting. Pushing waits for the next launch, so quitting never hangs on the network.
+  if (finishedQuitAutoSave || !reed || !autoSync?.state().enabled) return;
+  event.preventDefault();
+  finishedQuitAutoSave = true;
+  const deadline = new Promise((resolve) => setTimeout(resolve, 10_000));
+  void Promise.race([autoSync.run({ push: false }), deadline]).finally(() => app.quit());
+});
+app.on("will-quit", () => { updater?.dispose(); autoSync?.dispose(); reed?.close(); reed = null; });
 app.on("activate", () => {
   if (!window || window.isDestroyed()) void createWindow();
   else revealWindow(window);
@@ -627,6 +660,15 @@ void app.whenReady().then(async () => {
     autoCheck: autoCheckUpdates,
     publish: (state) => { if (window && !window.isDestroyed()) window.webContents.send("reed:update-state-changed", state); },
     persistAutoCheck: async (enabled) => { autoCheckUpdates = enabled; await saveAppSettings(); },
+  });
+  autoSync = new AutoSyncController({
+    settings: autoSyncSettings,
+    projectRoot: () => reed?.paths.root ?? null,
+    canPush: () => reed?.getProject().pullRequestProvider === "github",
+    exportProject: async () => { if (reed) await exportProjectJson(reed); },
+    serialize: serializeGit,
+    publish: (state) => { if (window && !window.isDestroyed()) window.webContents.send("reed:auto-sync-changed", state); },
+    persist: async (settings) => { autoSyncSettings = settings; await saveAppSettings(); },
   });
   registerIpc();
   recentProjects = await loadRecentProjects();

@@ -94,7 +94,7 @@ Select the exact recording language and export the whole cast, one character, re
 
 Every completed edit autosaves to the local SQLite project. Reed also provides rolling and named database backups, deterministic project JSON, review snapshots, and optional local Git checkpoints. **Saved** means the database is current; a checkpoint is a separate named story milestone.
 
-GitHub collaboration is optional per project and managed inside Reed. From **Saved** or **History**, a team can connect or create a repository, fetch, push a clean branch, open a pull request, review it, and merge it. Reed never performs background sync or asks a writer to manage routine project versioning in a terminal.
+GitHub collaboration is optional per project and managed inside Reed. From **Saved** or **History**, a team can connect or create a repository, fetch, push a clean branch, open a pull request, review it, and merge it. Git autosave (on by default, every 5 minutes, adjustable in Reed settings) commits the story to local history and pushes it when the remote has nothing newer; it never pulls or force-pushes. Writers never need a terminal for routine versioning.
 
 ### Bring your own writing or coding agent
 

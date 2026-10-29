@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AppearanceState, MenuCommand, MutationName, ReedDesktopApi, SaveStateEvent, UpdateState } from "./contract.js";
+import type { AppearanceState, AutoSyncState, MenuCommand, MutationName, ReedDesktopApi, SaveStateEvent, UpdateState } from "./contract.js";
 
 const saveListeners = new Set<(event: SaveStateEvent) => void>();
 function emitSaveState(event: SaveStateEvent): void { for (const listener of saveListeners) listener(event); }
@@ -52,6 +52,9 @@ const api: ReedDesktopApi = {
   checkForUpdates: () => ipcRenderer.invoke("reed:update-check"),
   installUpdate: () => ipcRenderer.invoke("reed:update-install"),
   setAutoUpdateCheck: (enabled) => ipcRenderer.invoke("reed:update-auto", enabled),
+  getAutoSyncState: () => ipcRenderer.invoke("reed:auto-sync-state"),
+  setAutoSync: (settings) => ipcRenderer.invoke("reed:auto-sync-set", settings),
+  runAutoSync: () => ipcRenderer.invoke("reed:auto-sync-run"),
   openUpdateRelease: () => ipcRenderer.invoke("reed:update-release-page"),
   revealInFinder: (filePath) => ipcRenderer.invoke("reed:reveal", filePath),
   listBackups: () => ipcRenderer.invoke("reed:backups"),
@@ -70,6 +73,11 @@ const api: ReedDesktopApi = {
     const handler = (_event: Electron.IpcRendererEvent, state: AppearanceState) => listener(state);
     ipcRenderer.on("reed:appearance-changed", handler);
     return () => ipcRenderer.removeListener("reed:appearance-changed", handler);
+  },
+  onAutoSyncState: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: AutoSyncState) => listener(state);
+    ipcRenderer.on("reed:auto-sync-changed", handler);
+    return () => ipcRenderer.removeListener("reed:auto-sync-changed", handler);
   },
   onUpdateState: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, state: UpdateState) => listener(state);

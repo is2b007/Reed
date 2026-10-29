@@ -15,6 +15,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -94,6 +95,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -104,6 +106,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipBox
@@ -149,6 +152,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.Role
@@ -211,6 +215,11 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.refreshAfterAgentChanges()
+    }
+
+    override fun onStop() {
+        viewModel.onAppBackgrounded()
+        super.onStop()
     }
 }
 
@@ -1757,6 +1766,38 @@ private fun VariableWorkspace(state: ReedUiState, viewModel: ReedViewModel, modi
 }
 
 @Composable
+private fun AutoSyncSettings(state: ReedUiState, viewModel: ReedViewModel) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Autosave to Git", fontWeight = FontWeight.SemiBold)
+            Text(
+                if (state.autoSyncEnabled) "Commits every ${state.autoSyncMinutes} min and when Reed leaves the screen, then pushes if an access token is saved."
+                else "Off. Edits still save on this tablet; create checkpoints and push by hand.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = state.autoSyncEnabled, onCheckedChange = { viewModel.setAutoSync(it) })
+    }
+    if (state.autoSyncEnabled) {
+        Spacer(Modifier.height(8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            AUTO_SYNC_INTERVALS.forEach { minutes ->
+                FilterChip(
+                    selected = state.autoSyncMinutes == minutes,
+                    onClick = { viewModel.setAutoSync(true, minutes) },
+                    label = { Text(if (minutes == 1) "1 min" else "$minutes min") },
+                )
+            }
+            OutlinedButton(onClick = { viewModel.autoSyncNow() }) { Text("Commit and push now") }
+        }
+    }
+    state.autoSyncMessage?.let {
+        Spacer(Modifier.height(6.dp))
+        Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
 private fun GitWorkspace(
     state: ReedUiState,
     viewModel: ReedViewModel,
@@ -1767,7 +1808,7 @@ private fun GitWorkspace(
     var tokenOpen by remember { mutableStateOf(false) }
     Column(modifier.padding(22.dp).widthIn(max = 880.dp).verticalScroll(rememberScrollState())) {
         Text("Git versioning", style = MaterialTheme.typography.headlineSmall)
-        Text("Optional and explicit. Reed never fetches, pulls, or pushes in the background.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Optional. With autosave on, Reed commits on a timer and pushes when the remote has nothing newer. It never pulls or force-pushes on its own.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(22.dp))
         if (state.repository == null) {
             Icon(Icons.Outlined.Lock, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1789,6 +1830,8 @@ private fun GitWorkspace(
         }
         val repository = state.repository
         RepositorySummary(repository.url, state.repositoryStatus)
+        Spacer(Modifier.height(18.dp))
+        AutoSyncSettings(state, viewModel)
         Spacer(Modifier.height(18.dp))
         Text("1 · Checkpoint local work", fontWeight = FontWeight.SemiBold)
         Text("Writes the deterministic Reed export and records a local Git commit. No network is used.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -2700,11 +2743,7 @@ private fun TooltipIconButton(
 
 @Composable
 private fun ReedMark(size: Dp) {
-    Box(
-        Modifier.size(size).background(MaterialTheme.colorScheme.primaryContainer)
-            .border(1.dp, MaterialTheme.colorScheme.primary),
-        contentAlignment = Alignment.Center
-    ) { Text("R", fontWeight = FontWeight.Bold, fontSize = (size.value * 0.5f).sp, color = MaterialTheme.colorScheme.primary) }
+    Image(painterResource(R.drawable.reed_logo), contentDescription = null, modifier = Modifier.size(size))
 }
 
 private val NodeKind.display: String get() = when (this) {

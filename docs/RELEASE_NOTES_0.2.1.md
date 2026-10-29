@@ -1,6 +1,11 @@
 # Reed 0.2.1
 
-A fix for the desktop updater introduced in 0.2.0.
+Git autosave, plus a fix for the desktop updater introduced in 0.2.0.
+
+## New
+
+- **Git autosave**, on by default. Every 5 minutes (choose 1–60 in Reed settings on desktop, or the Git workspace on Android), and when a project closes or Reed quits or leaves the screen, Reed commits the story to its local Git history and pushes it to the remote. It only works in projects that already have local history, pushes only when GitHub is on (desktop) or an access token is saved (Android), and never pulls, merges, or force-pushes. If the remote has newer work, Reed keeps committing locally and tells you.
+- The Android project home shows the real Reed logo instead of a boxed "R", and the macOS disk image uses the Reed icon instead of the Electron one.
 
 ## Fixes
 

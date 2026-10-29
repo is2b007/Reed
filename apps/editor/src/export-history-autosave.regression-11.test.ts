@@ -26,7 +26,7 @@ describe("export, history, and autosave regressions", () => {
 
     expect(history).toContain("GitHub is off");
     expect(history).toContain("Check GitHub connection");
-    expect(history).toContain("No background fetches");
+    expect(history).toContain("it never pulls remote changes into the open story");
     expect(history).toContain("Check for updates");
     expect(history).toContain("Push to GitHub");
     expect(main).toContain('ipcMain.handle("reed:git-checkpoint"');

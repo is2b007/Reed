@@ -2,6 +2,7 @@ import type {
   BackupRecord,
   ConversationGraph,
   MutationRecord,
+  ProjectGitAutoSyncOutcome,
   ProjectGitCheckpointResult,
   ProjectGitHubStatus,
   ProjectGitStatus,
@@ -36,6 +37,17 @@ export interface UpdateState {
   lastCheckedAt?: string;
   /** False when this copy cannot replace itself (development build, disk image, unsupported platform). */
   canInstall: boolean;
+}
+export interface AutoSyncSettings {
+  /** On by default: Reed commits the open story to its local Git history and pushes to origin when one is set. */
+  enabled: boolean;
+  intervalMinutes: number;
+}
+export interface AutoSyncState extends AutoSyncSettings {
+  running: boolean;
+  lastRunAt?: string;
+  lastOutcome?: ProjectGitAutoSyncOutcome | "error";
+  message?: string;
 }
 export type MenuCommand =
   | { type: "new-project" | "open-project" | "show-home" | "close-project" | "preferences" | "check-updates" | "project-settings" | "focus-search" | "toggle-navigator" | "toggle-inspector" | "create-backup" }
@@ -94,6 +106,9 @@ export interface ReedDesktopApi {
   checkForUpdates(): Promise<UpdateState>;
   installUpdate(): Promise<UpdateState>;
   setAutoUpdateCheck(enabled: boolean): Promise<UpdateState>;
+  getAutoSyncState(): Promise<AutoSyncState>;
+  setAutoSync(settings: Partial<AutoSyncSettings>): Promise<AutoSyncState>;
+  runAutoSync(): Promise<AutoSyncState>;
   openUpdateRelease(): Promise<void>;
   revealInFinder(filePath: string): Promise<void>;
   listBackups(): Promise<BackupRecord[]>;
@@ -103,6 +118,7 @@ export interface ReedDesktopApi {
   onSaveState(listener: (event: SaveStateEvent) => void): () => void;
   onAppearanceChanged(listener: (state: AppearanceState) => void): () => void;
   onUpdateState(listener: (state: UpdateState) => void): () => void;
+  onAutoSyncState(listener: (state: AutoSyncState) => void): () => void;
 }
 
 declare global {

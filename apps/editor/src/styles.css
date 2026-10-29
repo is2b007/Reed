@@ -374,3 +374,4 @@ button.tree-heading:hover, .tree-disclosure:hover { background:var(--raised); co
   .home-aside { display:block; }.home-aside dl { margin-top:22px; }
 }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { transition-duration:.01ms !important; animation-duration:.01ms !important; } button:not(:disabled):active { scale:1; } }
+.save-git-autosync { margin:0; padding:6px 14px; color:var(--sub); font-size:11px; }.save-git-autosync.warning { color:var(--error-text); }

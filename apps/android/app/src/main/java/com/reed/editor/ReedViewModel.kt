@@ -16,6 +16,11 @@ import com.reed.git.RepositoryStatus
 import com.reed.editor.agent.AgentAccessStatus
 import com.reed.remote.RemoteBridgePhase
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +30,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 import java.security.MessageDigest
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 enum class Workspace { GRAPH, CHARACTERS, VARIABLES, TRANSLATION, GIT, AGENT, SETTINGS }
 
@@ -54,6 +62,9 @@ data class ReedUiState(
     val linkOriginNodeId: String? = null,
     val agentAccess: AgentAccessStatus = AgentAccessStatus(),
     val agentRelayUrl: String = "",
+    val autoSyncEnabled: Boolean = true,
+    val autoSyncMinutes: Int = DEFAULT_AUTO_SYNC_MINUTES,
+    val autoSyncMessage: String? = null,
 ) {
     val selectedNode: DialogueNodeRecord?
         get() = graph?.nodes?.firstOrNull { it.id == selectedNodeId }
@@ -63,6 +74,12 @@ data class ReedUiState(
             agentRelayUrl == BuildConfig.DEFAULT_AGENT_RELAY_URL
 }
 
+const val DEFAULT_AUTO_SYNC_MINUTES = 5
+val AUTO_SYNC_INTERVALS = listOf(1, 5, 10, 15, 30, 60)
+
+fun autoSyncCheckpointName(now: Instant): String =
+    "Autosave " + DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneOffset.UTC).format(now) + " UTC"
+
 class ReedViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as ReedApplication
     private val core = app.core
@@ -70,8 +87,18 @@ class ReedViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = application.getSharedPreferences("reed.android", 0)
     private val mutableState = MutableStateFlow(ReedUiState())
     val state: StateFlow<ReedUiState> = mutableState.asStateFlow()
+    private val gitLock = Mutex()
+    private var autoSyncJob: Job? = null
 
     init {
+        mutableState.update {
+            it.copy(
+                autoSyncEnabled = preferences.getBoolean("git.autoSync", true),
+                autoSyncMinutes = preferences.getInt("git.autoSyncMinutes", DEFAULT_AUTO_SYNC_MINUTES)
+                    .takeIf { minutes -> minutes in AUTO_SYNC_INTERVALS } ?: DEFAULT_AUTO_SYNC_MINUTES,
+            )
+        }
+        scheduleAutoSync()
         refreshProjects(openLast = true)
         val configuredRelayUrl = preferences.getString("remote.relayUrl", null)
             ?.takeIf(String::isNotBlank)
@@ -125,6 +152,7 @@ class ReedViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun closeProject() {
+        autoSyncNow(push = false)
         mutableState.update {
             it.copy(
                 activeProject = null, overview = null, graph = null, selectedNodeId = null,
@@ -418,11 +446,76 @@ class ReedViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setAutoSync(enabled: Boolean, minutes: Int = state.value.autoSyncMinutes) {
+        val interval = minutes.takeIf { it in AUTO_SYNC_INTERVALS } ?: DEFAULT_AUTO_SYNC_MINUTES
+        preferences.edit { putBoolean("git.autoSync", enabled); putInt("git.autoSyncMinutes", interval) }
+        mutableState.update { it.copy(autoSyncEnabled = enabled, autoSyncMinutes = interval) }
+        scheduleAutoSync()
+    }
+
+    /** Called when Reed leaves the screen: commit locally so nothing waits on the network. */
+    fun onAppBackgrounded() {
+        if (state.value.autoSyncEnabled) autoSyncNow(push = false)
+    }
+
+    /**
+     * Commits the open story to its repository and pushes when a token is saved and the remote has nothing newer.
+     * Never pulls, merges, or force-pushes on its own; a newer remote is left for the writer to review.
+     */
+    fun autoSyncNow(push: Boolean = true) {
+        val project = state.value.activeProject ?: return
+        val repository = state.value.repository ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val message = runCatching {
+                gitLock.withLock {
+                    val committedBefore = git.status(repository.directory).head
+                    var status = git.checkpoint(repository.directory, project.id, autoSyncCheckpointName(Instant.now()), repository.identity)
+                    val committed = status.head != committedBefore
+                    val token = app.tokens.load(repository.url)
+                    val result = when {
+                        !push -> if (committed) "Autosaved a local checkpoint" else "Local history is up to date"
+                        token == null -> if (committed) "Autosaved locally. Save an access token to push automatically" else "Local history is up to date"
+                        else -> {
+                            status = runCatching { git.fetch(repository.directory, token) }.getOrElse {
+                                mutableState.update { state -> state.copy(repositoryStatus = status) }
+                                return@withLock "Autosaved locally. Could not reach the remote; Reed will try again"
+                            }
+                            when {
+                                status.behind > 0 -> "The remote has newer checkpoints. Review and pull them; Reed will not overwrite them"
+                                status.ahead > 0 -> {
+                                    status = git.push(repository.directory, token).status
+                                    "Autosaved and pushed"
+                                }
+                                else -> if (committed) "Autosaved a checkpoint" else "Everything is pushed"
+                            }
+                        }
+                    }
+                    mutableState.update { it.copy(repositoryStatus = status) }
+                    result
+                }
+            }.getOrElse { error -> "Autosave failed: ${error.message ?: error::class.simpleName}" }
+            val time = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneOffset.systemDefault()).format(Instant.now())
+            mutableState.update { it.copy(autoSyncMessage = "$message · $time") }
+        }
+    }
+
+    private fun scheduleAutoSync() {
+        autoSyncJob?.cancel()
+        if (!state.value.autoSyncEnabled) return
+        val interval = state.value.autoSyncMinutes * 60_000L
+        autoSyncJob = viewModelScope.launch {
+            while (isActive) {
+                delay(interval)
+                autoSyncNow()
+            }
+        }
+    }
+
     fun checkpoint(message: String) {
         val project = state.value.activeProject ?: return
         val repository = state.value.repository ?: return
         io("Creating checkpoint") {
-            val status = git.checkpoint(repository.directory, project.id, message, repository.identity)
+            val status = gitLock.withLock { git.checkpoint(repository.directory, project.id, message, repository.identity) }
             mutableState.update { it.copy(repositoryStatus = status, notice = "Checkpoint created", saved = true) }
         }
     }
@@ -514,7 +607,7 @@ class ReedViewModel(application: Application) : AndroidViewModel(application) {
         action: suspend (RepositoryConnection, String?) -> Unit,
     ) {
         val repository = state.value.repository ?: return
-        io(label) { action(repository, app.tokens.load(repository.url)) }
+        io(label) { gitLock.withLock { action(repository, app.tokens.load(repository.url)) } }
     }
 
     private fun io(label: String?, block: suspend () -> Unit) {

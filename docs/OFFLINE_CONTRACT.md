@@ -66,8 +66,9 @@ Remote Agent Access is isolated to Android's `remote` transport module and a for
 - Export ordering is deterministic so Git works without a Reed account or server.
 - Local Git support may initialize repositories, inspect status/history, create commits and branches, compare a branch with its local base, and edit the local `origin` configuration with no network.
 - The packaged Mac app should bundle a compatible `gh` executable. Reed may execute `git` or `gh` only after GitHub collaboration is enabled for the project and the user requests connection, repository creation/connection, fetch, push, pull-request creation, review, or merge.
-- GitHub status is checked only when the user asks. Do not add background synchronization, automatic fetch, automatic push, scheduled polling, token persistence, or a remote requirement for local save/history.
-- Android remote credentials, when a private HTTPS repository requires them, are encrypted with Android Keystore. Only the JGit boundary may decrypt them and only while handling the pressed Clone, Fetch, Pull, Push, or Sync action.
+- GitHub status is checked only when the user asks. Do not add token persistence on desktop or a remote requirement for local save/history.
+- Git autosave (Reed settings on desktop, the Git workspace on Android; on by default, every 5 minutes) is the one scheduled network action. It commits the open story only in projects that already have local history, and pushes only when the project has a remote (desktop: with GitHub collaboration on; Android: with a saved token). It fetches to compare, never pulls or merges into the open story, and never force-pushes: when the remote is ahead it keeps committing locally and tells the writer. Closing a project or quitting commits locally without touching the network. Turning it off restores fully manual behavior.
+- Android remote credentials, when a private HTTPS repository requires them, are encrypted with Android Keystore. Only the JGit boundary may decrypt them, while handling a pressed Clone, Fetch, Pull, Push, or Sync action or a Git autosave push.
 - Release notes and documentation must be available locally.
 
 ## Verification gates
