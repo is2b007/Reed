@@ -109,4 +109,45 @@ class GitRepositoryServiceTest {
             cloneCore.close()
         }
     }
+
+    @Test
+    fun pullRefusesToOverwriteEditsMadeSinceTheLastCheckpoint() = runBlocking {
+        val root = Files.createTempDirectory("reed-git-guard").toFile()
+        val remote = root.resolve("remote.git")
+        val worktree = root.resolve("worktree")
+        Git.init().setBare(true).setInitialBranch("main").setDirectory(remote).call().close()
+        Git.init().setInitialBranch("main").setDirectory(worktree).call().use { git ->
+            git.repository.config.apply {
+                setString("remote", "origin", "url", remote.toURI().toString())
+                save()
+            }
+        }
+        val snapshot = core.createProject("Guarded", "guarded-pull")
+        val service = GitRepositoryService(core, allowLocalFileRemotes = true)
+        val identity = GitIdentity("Reed Test", "reed@example.invalid")
+        service.checkpoint(worktree, snapshot.project.id, "Initial project", identity)
+        service.push(worktree, token = null)
+
+        val tabletCore = ReedCore(ApplicationProvider.getApplicationContext(), "git-guard-${System.nanoTime()}.sqlite")
+        try {
+            val tablet = GitRepositoryService(tabletCore, allowLocalFileRemotes = true)
+            val tabletDirectory = root.resolve("tablet")
+            tablet.clone(remote.toURI().toString(), tabletDirectory, token = null)
+            assertEquals(SyncDisposition.CURRENT, tablet.sync(tabletDirectory, token = null).disposition)
+
+            val graph = snapshot.conversations.single()
+            core.createNode(snapshot.project.id, graph.id, NodeKind.LINE, 300.0, 200.0, core.conversationGraph(graph.id).version)
+            service.checkpoint(worktree, snapshot.project.id, "Desk edit", identity)
+            service.push(worktree, token = null)
+
+            val tabletGraph = tabletCore.conversationGraph(graph.id)
+            tabletCore.createNode(snapshot.project.id, graph.id, NodeKind.CHOICE, 500.0, 320.0, tabletGraph.version)
+            val error = runCatching { tablet.pullFastForward(tabletDirectory, token = null) }.exceptionOrNull()
+            assertEquals(GitRepositoryService.UNCHECKPOINTED_EDITS, error?.message)
+            assertEquals(SyncDisposition.WORKTREE_DIRTY, tablet.sync(tabletDirectory, token = null).disposition)
+            assertEquals(2, tabletCore.conversationGraph(graph.id).nodes.size)
+        } finally {
+            tabletCore.close()
+        }
+    }
 }

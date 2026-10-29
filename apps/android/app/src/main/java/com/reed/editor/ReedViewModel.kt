@@ -349,21 +349,26 @@ class ReedViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveVariable(id: String?, name: String, type: String, initialValue: String, description: String) {
         val project = state.value.activeProject ?: return
-        val parsed = when (type) {
-            "boolean" -> JsonPrimitive(initialValue.equals("true", ignoreCase = true))
-            "number" -> JsonPrimitive(initialValue.toDoubleOrNull() ?: 0.0)
-            else -> JsonPrimitive(initialValue)
-        }
         io("Saving variable") {
+            val trimmed = initialValue.trim()
+            val parsed = when (type) {
+                "boolean" -> JsonPrimitive(trimmed.equals("true", ignoreCase = true))
+                // Keep whole numbers integral (5, not 5.0) so exports match desktop Reed, and reject typos
+                // instead of silently storing 0.
+                "number" -> trimmed.toLongOrNull()?.let(::JsonPrimitive)
+                    ?: trimmed.toDoubleOrNull()?.takeIf(Double::isFinite)?.let(::JsonPrimitive)
+                    ?: throw IllegalArgumentException("Initial value must be a number")
+                else -> JsonPrimitive(initialValue)
+            }
             core.upsertVariable(project.id, id, name, type, parsed, description, project.version)
             reloadActive("Variable saved")
         }
     }
 
     fun cloneRepository(url: String, token: String?, identity: GitIdentity) = io("Cloning repository") {
-        val directory = File(getApplication<Application>().filesDir, "repositories/${stableName(url)}")
+        val directory = freshRepositoryDirectory(stableName(url.trim()))
         val result = git.clone(url.trim(), directory, token?.trim()?.ifEmpty { null })
-        val project = requireNotNull(result.importedProject).project
+        val project = requireNotNull(result.importedProject) { "The repository did not contain a Reed project" }.project
         if (!token.isNullOrBlank()) app.tokens.save(url.trim(), token.trim())
         saveConnection(project.id, RepositoryConnection(directory, url.trim(), identity))
         preferences.edit { putString("lastProject", project.id) }
@@ -373,7 +378,7 @@ class ReedViewModel(application: Application) : AndroidViewModel(application) {
     fun connectRepository(url: String, token: String?, identity: GitIdentity) {
         val project = state.value.activeProject ?: return
         io("Connecting repository") {
-            val directory = File(getApplication<Application>().filesDir, "repositories/${stableName(url + project.id)}")
+            val directory = freshRepositoryDirectory(stableName(url.trim() + project.id))
             val status = git.initialize(directory, project.id, url.trim(), identity)
             if (!token.isNullOrBlank()) app.tokens.save(url.trim(), token.trim())
             val connection = RepositoryConnection(directory, url.trim(), identity)
@@ -382,7 +387,7 @@ class ReedViewModel(application: Application) : AndroidViewModel(application) {
                 it.copy(
                     repository = connection,
                     repositoryStatus = status,
-                    repositoryTokenConfigured = !token.isNullOrBlank(),
+                    repositoryTokenConfigured = app.tokens.load(connection.url) != null,
                     notice = "Local repository ready. Push when the remote is empty.",
                 )
             }
@@ -540,6 +545,14 @@ class ReedViewModel(application: Application) : AndroidViewModel(application) {
         val name = preferences.getString("repo.$projectId.name", "Reed Android") ?: "Reed Android"
         val email = preferences.getString("repo.$projectId.email", "reed@localhost") ?: "reed@localhost"
         return RepositoryConnection(File(directory), url, GitIdentity(name, email)).takeIf { it.directory.isDirectory }
+    }
+
+    /** Re-cloning or reconnecting the same URL gets a new folder instead of failing on the old one. */
+    private fun freshRepositoryDirectory(baseName: String): File {
+        val parent = File(getApplication<Application>().filesDir, "repositories")
+        return generateSequence(0) { it + 1 }
+            .map { attempt -> File(parent, if (attempt == 0) baseName else "$baseName-$attempt") }
+            .first { candidate -> !candidate.exists() || candidate.listFiles().isNullOrEmpty() }
     }
 
     private fun stableName(value: String): String {

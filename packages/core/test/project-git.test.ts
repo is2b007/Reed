@@ -54,3 +54,23 @@ describe.runIf(gitAvailable)("local project Git history", () => {
     }
   });
 });
+
+describe.runIf(gitAvailable)("project Git safety", () => {
+  it("credits the writer's Git identity and rejects option-like remotes", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "reed-git-identity-"));
+    roots.push(root);
+    const project = await ReedProject.create(root, { name: "Identity", slug: "identity-story", languages: ["en"], defaultLanguage: "en" });
+    try {
+      await exportProjectJson(project);
+      await initializeProjectGit(root);
+      execFileSync("git", ["config", "user.name", "Ada Writer"], { cwd: root });
+      execFileSync("git", ["config", "user.email", "ada@example.com"], { cwd: root });
+      const checkpoint = await checkpointProjectGit(root, "First draft");
+      expect(checkpoint.commit?.author).toBe("Ada Writer");
+      await expect(setProjectGitRemote(root, "--upload-pack=touch /tmp/x")).rejects.toThrow(/cannot be Git options/u);
+      await expect(setProjectGitRemote(root, "ext::sh -c touch% /tmp/x")).rejects.toThrow(/cannot be Git options/u);
+    } finally {
+      project.close();
+    }
+  });
+});

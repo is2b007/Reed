@@ -1,5 +1,5 @@
-import { mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { atomicWriteFile } from "./atomic-write.js";
 import { ConflictError } from "./errors.js";
 import type { DialogueNodeRecord } from "./models.js";
 import type { ReedProject } from "./project.js";
@@ -25,6 +25,7 @@ const TYPE = {
   text: [0, "CustomFieldType_Text"],
   number: [1, "CustomFieldType_Number"],
   boolean: [2, "CustomFieldType_Boolean"],
+  localization: [4, "CustomFieldType_Localization"],
   actor: [5, "CustomFieldType_Actor"],
 } as const;
 
@@ -51,14 +52,31 @@ function nodeFields(node: DialogueNodeRecord, languages: string[], defaultLangua
     field("Voice Status", node.voiceStatus),
     field("Tags", node.tags.join(",")),
   ];
+  // Dialogue System's "VoiceOverFile" entrytag format resolves audio by this field, so `AudioWait(entrytag)`
+  // finds the `{LineID}.wav` files named in the voice package.
+  if (node.kind === "line" || node.kind === "choice") fields.push(field("VoiceOverFile", node.lineId));
   for (const language of languages) {
     const value = texts.get(language);
     const dialogueTitle = options.dialogueTextFieldNames?.[language] ?? (language === defaultLanguage ? "Dialogue Text" : language);
     const menuTitle = options.menuTextFieldNames?.[language] ?? (language === defaultLanguage ? "Menu Text" : `Menu Text ${language}`);
-    fields.push(field(dialogueTitle, value?.text ?? ""));
-    if (value?.menuText) fields.push(field(menuTitle, value.menuText));
+    const kind = language === defaultLanguage ? "text" : "localization";
+    fields.push(field(dialogueTitle, value?.text ?? "", kind));
+    if (value?.menuText) fields.push(field(menuTitle, value.menuText, kind));
   }
   return fields;
+}
+
+function variableInitialValue(type: string, value: boolean | number | string): PixelCrushersField {
+  if (type === "boolean") return field("Initial Value", value === true || String(value).toLowerCase() === "true", "boolean");
+  if (type === "number") {
+    const numeric = typeof value === "number" ? value : Number(value);
+    return field("Initial Value", Number.isFinite(numeric) ? numeric : 0, "number");
+  }
+  return field("Initial Value", String(value));
+}
+
+function fileSlug(value: string): string {
+  return value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^[-.]+|-+$/gu, "") || "dialogue";
 }
 
 function actorNumericMap(reed: ReedProject): Map<string, number> {
@@ -87,7 +105,8 @@ function buildDatabase(reed: ReedProject, conversationIds: Set<string>, name: st
     locations: [],
     variables: reed.listVariables().map((variable) => ({
       id: variable.numericId,
-      fields: [field("Name", variable.name), field("Initial Value", variable.initialValue), field("Type", variable.type), field("Description", variable.description)],
+      // Dialogue System derives a variable's runtime type from the Initial Value field type.
+      fields: [field("Name", variable.name), variableInitialValue(variable.type, variable.initialValue), field("Description", variable.description)],
     })),
     conversations: allGraphs.filter((conversation) => conversationIds.has(conversation.id)).map((conversation) => ({
       id: conversation.numericId,
@@ -122,10 +141,7 @@ function buildDatabase(reed: ReedProject, conversationIds: Set<string>, name: st
 }
 
 async function atomicJson(target: string, value: unknown): Promise<void> {
-  await mkdir(path.dirname(target), { recursive: true });
-  const temporary = `${target}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(temporary, target);
+  await atomicWriteFile(target, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 export async function exportPixelCrushers(reed: ReedProject, options: PixelCrushersExportOptions = {}) {
@@ -137,14 +153,14 @@ export async function exportPixelCrushers(reed: ReedProject, options: PixelCrush
   const outputs: Array<{ partitionId: string | null; filePath: string; conversationIds: string[] }> = [];
   if ((options.mode ?? "single") === "single") {
     const ids = conversations.map((conversation) => conversation.id).sort();
-    const filePath = path.join(outputDirectory, `${options.databaseName ?? project.slug}.json`);
+    const filePath = path.join(outputDirectory, `${fileSlug(options.databaseName ?? project.slug)}.json`);
     await atomicJson(filePath, buildDatabase(reed, new Set(ids), options.databaseName ?? project.name, options));
     outputs.push({ partitionId: null, filePath, conversationIds: ids });
   } else {
     for (const partition of reed.listPartitions()) {
       const ids = conversations.filter((conversation) => conversation.partitionId === partition.id).map((conversation) => conversation.id).sort();
       if (ids.length === 0) continue;
-      const filePath = path.join(outputDirectory, `${project.slug}-${partition.baseId}-${partition.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.json`);
+      const filePath = path.join(outputDirectory, `${fileSlug(project.slug)}-${partition.baseId}-${fileSlug(partition.name)}.json`);
       await atomicJson(filePath, buildDatabase(reed, new Set(ids), `${project.name} — ${partition.name}`, options));
       outputs.push({ partitionId: partition.id, filePath, conversationIds: ids });
     }
@@ -152,13 +168,14 @@ export async function exportPixelCrushers(reed: ReedProject, options: PixelCrush
   const manifest = {
     generatedBy: "Reed",
     schemaVersion: project.schemaVersion,
+    entrytagFormat: "VoiceOverFile",
     databases: outputs,
     audio: conversations.flatMap((conversation) => reed.getConversation(conversation.id).nodes)
       .filter((node) => node.kind !== "start" && node.kind !== "group")
       .sort((a, b) => a.lineId.localeCompare(b.lineId))
       .map((node) => {
         const conversation = conversations.find((candidate) => candidate.id === node.conversationId);
-        return { lineId: node.lineId, file: `${node.lineId}.wav`, entrytag: `${conversation?.numericId ?? 0}.${node.entryNumericId}` };
+        return { lineId: node.lineId, file: `${node.lineId}.wav`, entrytag: node.lineId, conversationId: conversation?.numericId ?? 0, entryId: node.entryNumericId };
       }),
   };
   const manifestPath = path.join(outputDirectory, "reed-pixelcrushers-manifest.json");

@@ -161,7 +161,7 @@ if [[ "$REMOTE_IMAGE" == "None" || -z "$REMOTE_IMAGE" ]]; then
   exit 1
 fi
 
-CONTAINERS_JSON="$(node -e 'process.stdout.write(JSON.stringify({relay:{image:process.argv[1],ports:{"8787":"HTTP"}}}))' "$REMOTE_IMAGE")"
+CONTAINERS_JSON="$(node -e 'process.stdout.write(JSON.stringify({relay:{image:process.argv[1],ports:{"8787":"HTTP"},environment:{RELAY_TRUST_PROXY:"1"}}}))' "$REMOTE_IMAGE")"
 PUBLIC_ENDPOINT_JSON='{"containerName":"relay","containerPort":8787,"healthCheck":{"healthyThreshold":2,"unhealthyThreshold":2,"timeoutSeconds":5,"intervalSeconds":10,"path":"/healthz","successCodes":"200-299"}}'
 
 printf 'Starting the single-instance deployment...\n'

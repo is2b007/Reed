@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import {
   canonicalizeLanguageCode,
@@ -8,6 +8,7 @@ import {
   localeForUnity,
   localeForUnreal,
 } from "@reed/schema";
+import { atomicWriteFile } from "./atomic-write.js";
 import { ConflictError } from "./errors.js";
 import type { CharacterRecord, DialogueNodeRecord } from "./models.js";
 import type { ReedProject } from "./project.js";
@@ -181,13 +182,7 @@ function resources(entries: LocalizationEntry[]): StringResource[] {
   });
 }
 
-async function atomicWrite(filePath: string, contents: string): Promise<string> {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  const temporary = `${filePath}.tmp`;
-  await writeFile(temporary, contents, "utf8");
-  await rename(temporary, filePath);
-  return filePath;
-}
+const atomicWrite = atomicWriteFile;
 
 function resourceComment(resource: StringResource): string {
   return [
@@ -257,18 +252,102 @@ async function exportUnreal(directory: string, slug: string, languages: string[]
   }));
 }
 
-async function exportYarn(directory: string, slug: string, defaultLanguage: string, languages: string[], values: StringResource[]): Promise<string[]> {
-  return Promise.all(languages.map(async (language) => {
+interface YarnLocation {
+  file: string;
+  node: string;
+  lineNumber: number;
+}
+
+function yarnText(value: string): string {
+  return value.replace(/\r?\n/gu, " ").replace(/[\\#{}[\]<>]/gu, (character) => `\\${character}`).replaceAll("//", "\\/\\/").trim();
+}
+
+function yarnSpeaker(value: string): string {
+  return value.replace(/[:#\r\n]/gu, "").trim();
+}
+
+function hasMenuText(node: DialogueNodeRecord): boolean {
+  return node.texts.some((value) => Boolean(value.menuText));
+}
+
+function yarnNodeTitle(conversationNumericId: number, node: DialogueNodeRecord): string {
+  return node.kind === "start" ? `C${conversationNumericId}_Start` : `C${conversationNumericId}_E${node.entryNumericId}`;
+}
+
+/** Builds one `.yarn` script per scene so the strings tables have real lines to bind to. */
+function buildYarnScripts(reed: ReedProject, defaultLanguage: string): { scripts: Map<string, string>; locations: Map<string, YarnLocation> } {
+  const characters = new Map(reed.listCharacters().map((character) => [character.id, character]));
+  const scenes = new Map(reed.listScenes().map((scene) => [scene.id, scene]));
+  const graphs = reed.listConversations().map((conversation) => reed.getConversation(conversation.id));
+  const titles = new Map<string, string>();
+  for (const graph of graphs) for (const node of graph.nodes) titles.set(node.id, yarnNodeTitle(graph.numericId, node));
+  const nodeById = new Map(graphs.flatMap((graph) => graph.nodes.map((node) => [node.id, node] as const)));
+  const bySceneFile = new Map<string, string[]>();
+  const locations = new Map<string, YarnLocation>();
+  const sortedGraphs = [...graphs].sort((left, right) => (scenes.get(left.sceneId)?.sortOrder ?? 0) - (scenes.get(right.sceneId)?.sortOrder ?? 0)
+    || left.numericId - right.numericId || left.id.localeCompare(right.id));
+  for (const graph of sortedGraphs) {
+    const file = `${safeFilePart(scenes.get(graph.sceneId)?.slug ?? "scene")}.yarn`;
+    const lines = bySceneFile.get(file) ?? [];
+    bySceneFile.set(file, lines);
+    const push = (line: string, key?: string, title?: string) => {
+      lines.push(line);
+      if (key && title) locations.set(key, { file, node: title, lineNumber: lines.length });
+    };
+    for (const node of [...graph.nodes].sort((left, right) => left.entryNumericId - right.entryNumericId || left.id.localeCompare(right.id))) {
+      const title = titles.get(node.id) ?? yarnNodeTitle(graph.numericId, node);
+      if (lines.length > 0) push("");
+      push(`title: ${title}`);
+      push(`tags: reed ${node.kind}`);
+      push("---");
+      if (node.conditions.trim()) push(`// Pixel Crushers condition: ${node.conditions.replace(/\r?\n/gu, " ")}`);
+      const text = selectedText(node, defaultLanguage, "text");
+      const spokenHere = node.kind === "line" || (node.kind === "choice" && hasMenuText(node));
+      if (spokenHere && text.trim()) {
+        const speaker = node.speakerCharacterId ? yarnSpeaker(characters.get(node.speakerCharacterId)?.name ?? "") : "";
+        push(`${speaker ? `${speaker}: ` : ""}${yarnText(text)} #line:${node.lineId}`, node.lineId, title);
+      }
+      const children = graph.links.filter((link) => link.originNodeId === node.id)
+        .sort((left, right) => left.priority - right.priority || left.id.localeCompare(right.id))
+        .map((link) => nodeById.get(link.destinationNodeId))
+        .filter((child): child is DialogueNodeRecord => Boolean(child));
+      const options = children.filter((child) => child.kind === "choice");
+      for (const option of options) {
+        const optionKey = hasMenuText(option) ? `${option.lineId}.menu` : option.lineId;
+        const optionText = selectedText(option, defaultLanguage, "menuText") || selectedText(option, defaultLanguage, "text");
+        push(`-> ${yarnText(optionText) || "…"} #line:${optionKey}`, optionKey, title);
+        push(`    <<jump ${titles.get(option.id)}>>`);
+      }
+      const followers = children.filter((child) => child.kind !== "choice");
+      const [next, ...alternates] = followers;
+      // Yarn has no Lua conditions, so only the highest-priority follower is jumped to; note the rest for the writer.
+      for (const alternate of options.length === 0 ? alternates : followers) {
+        push(`// Reed also links to ${titles.get(alternate.id)}${alternate.conditions.trim() ? ` when ${alternate.conditions.replace(/\r?\n/gu, " ")}` : ""}`);
+      }
+      if (options.length === 0) push(next ? `<<jump ${titles.get(next.id)}>>` : "<<stop>>");
+      push("===");
+    }
+  }
+  return { scripts: new Map([...bySceneFile].map(([file, lines]) => [file, `${lines.join("\n")}\n`])), locations };
+}
+
+async function exportYarn(reed: ReedProject, directory: string, slug: string, defaultLanguage: string, languages: string[], values: StringResource[]): Promise<string[]> {
+  const { scripts, locations } = buildYarnScripts(reed, defaultLanguage);
+  const scriptPaths = await Promise.all([...scripts].map(([file, contents]) => atomicWrite(path.join(directory, file), contents)));
+  const stringPaths = await Promise.all(languages.map(async (language) => {
     const rows = [csvRow(["language", "id", "text", "file", "node", "lineNumber", "lock", "comment"])];
     for (const resource of values) {
+      const location = locations.get(resource.key);
+      if (!location) continue;
       const source = resource.values[defaultLanguage] ?? "";
       rows.push(csvRow([
-        language, `line:${resource.key}`, resource.values[language] ?? "", `${resource.entry.sceneSlug}.yarn`, resource.entry.conversation,
-        resource.entry.entryNumericId, yarnLock(source), resourceComment(resource),
+        language, `line:${resource.key}`, resource.values[language] ?? "", location.file, location.node,
+        location.lineNumber, yarnLock(source), resourceComment(resource),
       ]));
     }
     return atomicWrite(path.join(directory, `${slug}.${language}.strings.csv`), `${rows.join("\n")}\n`);
   }));
+  return [...scriptPaths, ...stringPaths];
 }
 
 function poHeader(language: string, projectName: string): string {
@@ -333,7 +412,7 @@ export async function exportGameData(reed: ReedProject, options: GameExportOptio
     case "unity-localization": filePaths = await exportUnity(...args, languages, stringResources); break;
     case "godot": filePaths = await exportGodot(...args, languages, stringResources); break;
     case "unreal-string-table": filePaths = await exportUnreal(...args, languages, stringResources); break;
-    case "yarn-spinner": filePaths = await exportYarn(...args, project.defaultLanguage, languages, stringResources); break;
+    case "yarn-spinner": filePaths = await exportYarn(reed, ...args, project.defaultLanguage, languages, stringResources); break;
     case "gettext": filePaths = await exportGettext(...args, project.name, project.defaultLanguage, languages, stringResources); break;
     case "xliff-2.0": filePaths = await exportXliff(...args, project.name, project.defaultLanguage, languages, stringResources); break;
   }

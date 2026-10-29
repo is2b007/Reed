@@ -1,5 +1,6 @@
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { atomicWriteFile } from "./atomic-write.js";
 import type { ProjectSnapshot } from "./models.js";
 import type { ReedProject } from "./project.js";
 
@@ -32,9 +33,9 @@ export function serializeProject(reed: ReedProject): string {
 
 export async function exportProjectJson(reed: ReedProject, outputPath?: string): Promise<string> {
   const target = path.resolve(outputPath ?? path.join(reed.paths.exports, "reed-project.json"));
-  await mkdir(path.dirname(target), { recursive: true });
-  const temporary = `${target}.tmp`;
-  await writeFile(temporary, serializeProject(reed), "utf8");
-  await rename(temporary, target);
-  return target;
+  const serialized = serializeProject(reed);
+  // Skip identical rewrites so status checks do not churn file timestamps or watchers.
+  const current = await readFile(target, "utf8").catch(() => null);
+  if (current === serialized) return target;
+  return atomicWriteFile(target, serialized);
 }

@@ -151,6 +151,7 @@ class GitRepositoryService private constructor(
         token: String?,
     ): SyncResult = withContext(Dispatchers.IO) {
         open(directory).use { git ->
+            require(liveProjectCheckpointed(directory)) { UNCHECKPOINTED_EDITS }
             requireClean(git)
             fetchInternal(git, token)
             val before = status(git.repository)
@@ -195,7 +196,7 @@ class GitRepositoryService private constructor(
         token: String?,
     ): SyncResult = withContext(Dispatchers.IO) {
         open(directory).use { git ->
-            if (!git.status().call().isClean) {
+            if (!git.status().call().isClean || !liveProjectCheckpointed(directory)) {
                 val dirty = status(git.repository)
                 return@withContext SyncResult(
                     SyncDisposition.WORKTREE_DIRTY, dirty,
@@ -256,6 +257,37 @@ class GitRepositoryService private constructor(
         }
     }
 
+    /**
+     * Pulling imports the remote JSON over the live SQLite project, so edits made in Reed since the last
+     * checkpoint must be committed first or they would be silently replaced.
+     */
+    private fun liveProjectCheckpointed(directory: File): Boolean {
+        val export = File(directory, EXPORT_PATH)
+        if (!export.isFile) return true
+        val committed = runCatching { core.validateProjectJson(export.readText(Charsets.UTF_8)) }.getOrNull() ?: return true
+        val live = runCatching { core.exportSnapshot(committed.project.id) }.getOrNull() ?: return true
+        return comparable(live) == comparable(committed)
+    }
+
+    /** Order-insensitive view of a snapshot, so files written by desktop Reed compare equal to the same content here. */
+    private fun comparable(snapshot: ProjectSnapshot): ProjectSnapshot = snapshot.copy(
+        exportedAt = null,
+        allocations = null,
+        project = snapshot.project.copy(languages = snapshot.project.languages.distinct()),
+        levels = snapshot.levels.sortedBy { it.id },
+        scenes = snapshot.scenes.sortedBy { it.id },
+        conversations = snapshot.conversations.sortedBy { it.id }.map { graph ->
+            graph.copy(
+                nodes = graph.nodes.sortedBy { it.id }.map { node -> node.copy(texts = node.texts.sortedBy { it.language }) },
+                links = graph.links.sortedBy { it.id },
+            )
+        },
+        characters = snapshot.characters.sortedBy { it.id },
+        variables = snapshot.variables.sortedBy { it.id },
+        partitions = snapshot.partitions.sortedBy { it.id },
+        reviewSnapshots = snapshot.reviewSnapshots.sortedBy { it.id },
+    )
+
     private fun requireClean(git: Git) {
         require(git.status().call().isClean) { "Create a checkpoint before pulling or pushing" }
     }
@@ -309,6 +341,7 @@ class GitRepositoryService private constructor(
 
     companion object {
         const val EXPORT_PATH = "exports/reed-project.json"
+        const val UNCHECKPOINTED_EDITS = "You have edits since your last checkpoint. Create a checkpoint before pulling so they are not overwritten."
         private const val DEFAULT_FETCH_REFSPEC = "+refs/heads/*:refs/remotes/origin/*"
     }
 }

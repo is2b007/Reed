@@ -153,3 +153,65 @@ describe("Reed remote MCP relay", () => {
     expect(offline.status).toBe(503);
   });
 });
+
+describe("Reed relay resilience", () => {
+  const channelId = "channel_resilience0123456789ab";
+  const deviceToken = "device_resilience0123456789abcdefghijk";
+  const connectorToken = "connector_resilience0123456789abcdefg";
+
+  async function connect(base: string, id = channelId, token = deviceToken): Promise<Response> {
+    return fetch(`${base}/bridge/v1/connect`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ channelId: id, connectorToken, projectName: "Reed", expiresAt: Date.now() + 60_000 }),
+    });
+  }
+
+  it("redelivers a request when the tablet's long-poll dropped before it arrived", async () => {
+    const base = await testRelay();
+    await connect(base);
+    const dropped = new AbortController();
+    const poll = fetch(`${base}/bridge/v1/poll`, {
+      method: "POST", signal: dropped.signal,
+      headers: { authorization: `Bearer ${deviceToken}`, "content-type": "application/json" },
+      body: JSON.stringify({ channelId }),
+    }).catch(() => null);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    dropped.abort();
+    await poll;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const call = fetch(`${base}/mcp/${channelId}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${connectorToken}`, "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 7, method: "ping" }),
+    });
+    const next = await fetch(`${base}/bridge/v1/poll`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${deviceToken}`, "content-type": "application/json" },
+      body: JSON.stringify({ channelId }),
+    });
+    expect(next.status).toBe(200);
+    const envelope = await next.json() as { requestId: string; request: { id: number } };
+    expect(envelope.request.id).toBe(7);
+    await fetch(`${base}/bridge/v1/respond`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${deviceToken}`, "content-type": "application/json" },
+      body: JSON.stringify({ channelId, requestId: envelope.requestId, response: { jsonrpc: "2.0", id: 7, result: {} } }),
+    });
+    expect((await call).status).toBe(200);
+  });
+
+  it("rate-limits unauthenticated channel claims and caps channel count", async () => {
+    const server = createRelayServer({ connectsPerMinute: 3, maxChannels: 2 });
+    servers.push(server);
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const statuses: number[] = [];
+    for (let index = 0; index < 4; index += 1) {
+      statuses.push((await connect(base, `channel_capacity_${index}_0123456789`, `device_capacity_${index}_0123456789abcdefghij`)).status);
+    }
+    expect(statuses).toEqual([200, 200, 503, 429]);
+  });
+});

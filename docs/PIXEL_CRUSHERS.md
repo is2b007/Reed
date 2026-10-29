@@ -16,11 +16,13 @@ Partition Base ID ranges are persisted. Validation blocks overlapping ranges bef
 4. Select the generated local JSON and import it into a generated Dialogue Database asset.
 5. Do not edit generated dialogue in Unity. Re-export from Reed and replace/reimport the generated asset.
 6. For modular runtime loading, attach Extra Databases or call `DialogueManager.AddDatabase(db)` using the project's normal local Unity workflow. Reed requires no server.
-7. Name audio files exactly `{LineID}.wav`; use the manifest's entry-tag mapping for `AudioWait(entrytag)` or the project's equivalent sequence.
+7. Name audio files exactly `{LineID}.wav`. Every line and choice carries a `VoiceOverFile` field equal to its Line ID, so set the Dialogue Manager's **Entrytag Format** to **VoiceOverFile** and `AudioWait(entrytag)` resolves the files directly. The manifest lists each Line ID with its entry tag and numeric conversation/entry IDs.
 
 ## Localized field names
 
-The default mapping is `Dialogue Text` / `Menu Text` for the default language, the bare language code for localized dialogue (for example `de`), and `Menu Text de` for localized menu text. The exporter accepts a field-name mapping override because Pixel Crushers conventions can vary by version/project.
+The default mapping is `Dialogue Text` / `Menu Text` for the default language, the bare language code for localized dialogue (for example `de`), and `Menu Text de` for localized menu text. Localized fields use the Dialogue System's Localization field type.
+
+Variables carry a typed `Initial Value` field (Boolean, Number, or Text), which the Dialogue System uses as the variable's runtime type, so Lua conditions such as `Variable["Gold"] > 3` compare numbers. The exporter accepts a field-name mapping override because Pixel Crushers conventions can vary by version/project.
 
 ## Required certification fixture
 

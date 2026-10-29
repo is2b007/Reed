@@ -83,7 +83,7 @@ async function loadAppSettings(): Promise<void> {
 
 async function saveAppSettings(): Promise<void> {
   const file = appSettingsFile();
-  const temporary = `${file}.tmp`;
+  const temporary = `${file}.${process.pid}.tmp`;
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(temporary, `${JSON.stringify({ appearance: appearancePreference }, null, 2)}\n`, "utf8");
   await rename(temporary, file);
@@ -117,7 +117,7 @@ async function loadRecentProjects(): Promise<RecentProject[]> {
 
 async function saveRecentProjects(): Promise<void> {
   const file = recentProjectsFile();
-  const temporary = `${file}.tmp`;
+  const temporary = `${file}.${process.pid}.tmp`;
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(temporary, `${JSON.stringify(recentProjects, null, 2)}\n`, "utf8");
   await rename(temporary, file);
@@ -498,6 +498,20 @@ function registerIpc(): void {
   });
   ipcMain.handle("reed:github-pr-review", (_event, input: Parameters<typeof reviewProjectGitHubPullRequest>[1]) => reviewProjectGitHubPullRequest(requireGitHubProject().paths.root, input));
   ipcMain.handle("reed:github-pr-merge", (_event, number: number, strategy: "merge" | "squash" | "rebase") => mergeProjectGitHubPullRequest(requireGitHubProject().paths.root, number, strategy));
+  ipcMain.handle("reed:backups", () => requireProject().listBackups());
+  ipcMain.handle("reed:restore-backup", async (_event, backupId: string, confirmation: string) => {
+    const project = requireProject();
+    const root = project.paths.root;
+    reed = null;
+    try {
+      await project.restoreBackup(String(backupId), String(confirmation));
+    } finally {
+      project.close();
+      reed = await ReedProject.open(root);
+    }
+    refreshApplicationMenu();
+    return bootstrap(reed);
+  });
   ipcMain.handle("reed:get-appearance", () => appearanceState());
   ipcMain.handle("reed:set-appearance", (_event, preference: AppearancePreference) => setAppearance(preference));
   ipcMain.handle("reed:reveal", async (_event, filePath: string) => {

@@ -51,12 +51,16 @@ class RemoteAgentService : Service() {
             notification(configuration.projectName, "Connecting…"),
             android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
         )
-        sessionJob?.cancel()
+        val previousSession = sessionJob
+        previousSession?.cancel()
         val app = application as ReedApplication
         val dispatcher = AndroidMcpDispatcher(app.core, configuration.projectId) {
             RemoteAgentAccessRuntime.markRequest(configuration.projectId)
         }
         sessionJob = scope.launch {
+            // Let the previous session finish its relay disconnect first; it shares this channel and would
+            // otherwise tear down the new connection.
+            previousSession?.join()
             RelayBridgeClient().run(
                 configuration = configuration,
                 onState = { bridgeState ->

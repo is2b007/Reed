@@ -218,7 +218,7 @@ function githubRepository(remote: string): string | null {
 
 function repositoryInput(value: string): { repository: string; remote: string } {
   const trimmed = value.trim();
-  const direct = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(trimmed) ? trimmed : null;
+  const direct = /^[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9_.][A-Za-z0-9_.-]*$/u.test(trimmed) ? trimmed : null;
   const repository = direct ?? githubRepository(trimmed);
   if (!repository || trimmed.length > 2_000 || /[\r\n\0]/u.test(trimmed)) {
     throw new ConflictError("Enter a GitHub repository as owner/name or a github.com URL");
@@ -453,7 +453,7 @@ export async function createProjectGitHubRepository(root: string, input: CreateP
   if (!status.clean) throw new ConflictError("Checkpoint local changes before creating a GitHub repository", { changes: status.changes });
   if (status.remote) throw new ConflictError("This project already has an origin remote", { remote: status.remote });
   const name = input.name.trim();
-  if (!/^(?:[A-Za-z0-9_.-]+\/)?[A-Za-z0-9_.-]+$/u.test(name) || name.length > 200) throw new ConflictError("Repository names must be owner/name or a valid GitHub repository name");
+  if (!/^(?:[A-Za-z0-9][A-Za-z0-9_.-]*\/)?[A-Za-z0-9_.][A-Za-z0-9_.-]*$/u.test(name) || name.length > 200) throw new ConflictError("Repository names must be owner/name or a valid GitHub repository name");
   const description = input.description?.trim() ?? "";
   if (description.length > 350 || /[\r\n\0]/u.test(description)) throw new ConflictError("Repository descriptions must be one line and at most 350 characters");
   if (!["private", "public", "internal"].includes(input.visibility)) throw new ConflictError("Choose private, public, or internal repository visibility");
@@ -523,6 +523,7 @@ export async function reviewProjectGitHubPullRequest(root: string, input: Review
 export async function mergeProjectGitHubPullRequest(root: string, numberValue: number, strategy: "merge" | "squash" | "rebase" = "squash"): Promise<ProjectGitHubStatus> {
   const { projectRoot, repository } = await requireGitHubRepository(root);
   const number = positivePullRequestNumber(numberValue);
+  if (!["merge", "squash", "rebase"].includes(strategy)) throw new ConflictError("Choose merge, squash, or rebase", { strategy });
   const merged = await runGitHub(projectRoot, ["pr", "merge", String(number), "--repo", repository, `--${strategy}`], { timeout: 2 * 60_000 });
   if (!merged.ok) throw new ReedError("Could not merge the GitHub pull request", "GITHUB_PULL_REQUEST_MERGE_FAILED", { detail: githubError(merged) });
   return inspectProjectGitHub(projectRoot);
@@ -609,8 +610,17 @@ export async function checkpointProjectGit(root: string, message: string): Promi
   const staged = await runGit(projectRoot, ["diff", "--cached", "--quiet", "--exit-code"]);
   if (staged.ok) return { created: false, commit: null, status: await inspectProjectGit(projectRoot) };
   if (staged.code !== 1) throw new ReedError("Could not inspect the staged story checkpoint", "GIT_STATUS_FAILED", { stderr: cleanOutput(staged.stderr) });
+  // Attribute checkpoints to the writer's own Git identity when one is configured, so pushed commits
+  // link to their GitHub account; fall back to a local placeholder only when Git has no identity.
+  const [configuredName, configuredEmail] = await Promise.all([
+    runGit(projectRoot, ["config", "--get", "user.name"]),
+    runGit(projectRoot, ["config", "--get", "user.email"]),
+  ]);
+  const identity = configuredName.ok && cleanOutput(configuredName.stdout) && configuredEmail.ok && cleanOutput(configuredEmail.stdout)
+    ? []
+    : ["-c", "user.name=Reed Local History", "-c", "user.email=history@reed.local"];
   const committed = await runGit(projectRoot, [
-    "-c", "core.hooksPath=/dev/null", "-c", "user.name=Reed Local History", "-c", "user.email=history@reed.local",
+    "-c", "core.hooksPath=/dev/null", ...identity,
     "commit", "--no-gpg-sign", "-m", summary,
   ]);
   if (!committed.ok) throw new ReedError("Could not create the local story checkpoint", "GIT_COMMIT_FAILED", { stderr: cleanOutput(committed.stderr) });
@@ -624,6 +634,7 @@ export async function setProjectGitRemote(root: string, url: string | null): Pro
   if (!status.initialized) throw new ConflictError("Initialize local Git history before configuring a remote", { root: projectRoot });
   const value = url?.trim() ?? "";
   if (value.length > 2_000 || /[\r\n\0]/u.test(value)) throw new ConflictError("Remote URLs must be one line and at most 2,000 characters");
+  if (value.startsWith("-") || /^(?:ext|fd)::/iu.test(value)) throw new ConflictError("Remote URLs cannot be Git options or command transports", { remote: value });
   const existing = await runGit(projectRoot, ["remote", "get-url", "origin"]);
   const result = value
     ? await runGit(projectRoot, ["remote", existing.ok ? "set-url" : "add", "origin", value])

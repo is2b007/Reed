@@ -10,6 +10,8 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
 import java.io.File
 import java.io.FileOutputStream
 import java.time.Instant
@@ -367,24 +369,21 @@ class ReedCore(
         val conversation = readConversations(db, "id = ?", arrayOf(node.conversationId)).single()
         checkVersion(conversation.version, expectedVersion)
         require(source != "agent" || node.lineStatus != TextStatus.FINAL) { "Agents cannot edit Final line text" }
-        val before = db.rawQuery(
-            "SELECT text_value, menu_text, verification_status, created_at FROM node_texts WHERE node_id = ? AND language = ?",
-            arrayOf(node.id, language)
-        ).use { cursor ->
-            if (cursor.moveToFirst()) cursor.string("text_value") else null
-        }
+        val existing = node.texts.firstOrNull { it.language == language }
+        val before = existing?.text
         val now = Instant.now().toString()
-        val createdAt = db.rawQuery(
-            "SELECT created_at FROM node_texts WHERE node_id = ? AND language = ?",
-            arrayOf(node.id, language)
-        ).use { if (it.moveToFirst()) it.string("created_at") else now }
-        val record = NodeTextRecord(language, text, menuText, VerificationStatus.UNVERIFIED, createdAt, now)
+        val textChanged = before != text
+        // Match desktop Reed: unchanged dialogue keeps its verification, and changed dialogue sends recorded
+        // voice and human-finalized text back to rework instead of silently staying Final.
+        val verification = if (textChanged) VerificationStatus.UNVERIFIED else existing?.verificationStatus ?: VerificationStatus.UNVERIFIED
+        val record = NodeTextRecord(language, text, menuText, verification, existing?.createdAt ?: now, now)
         insertNodeText(db, node.id, record, replace = true)
-        if (node.voiceStatus in setOf(VoiceStatus.RECORDED, VoiceStatus.PROCESSED, VoiceStatus.FINAL)) {
-        db.execSQL("UPDATE nodes SET voice_status = 'rework', updated_at = ? WHERE id = ?", arrayOf<Any?>(now, node.id))
-        } else {
-            db.execSQL("UPDATE nodes SET updated_at = ? WHERE id = ?", arrayOf<Any?>(now, node.id))
-        }
+        val voiceNeedsRework = textChanged && node.voiceStatus in setOf(VoiceStatus.RECORDED, VoiceStatus.PROCESSED, VoiceStatus.FINAL)
+        val lineNeedsRework = textChanged && node.lineStatus == TextStatus.FINAL
+        db.execSQL(
+            "UPDATE nodes SET voice_status = CASE WHEN ? THEN 'rework' ELSE voice_status END, line_status = CASE WHEN ? THEN 'rework' ELSE line_status END, updated_at = ? WHERE id = ?",
+            arrayOf<Any?>(if (voiceNeedsRework) 1 else 0, if (lineNeedsRework) 1 else 0, now, node.id),
+        )
         val version = incrementConversationVersion(db, node.conversationId, expectedVersion, now)
         val sequence = recordMutation(
             db, projectId, version, "set_node_text", "node_text", "$lineId:$language",
@@ -732,6 +731,14 @@ class ReedCore(
         validateSource(source)
         require(name.matches(Regex("^[A-Za-z_][A-Za-z0-9_.-]{0,127}$"))) { "Invalid variable name" }
         require(type in setOf("boolean", "number", "text")) { "Invalid variable type" }
+        val primitive = initialValue as? JsonPrimitive
+        require(
+            primitive != null && when (type) {
+                "boolean" -> !primitive.isString && primitive.booleanOrNull != null
+                "number" -> !primitive.isString && primitive.doubleOrNull?.isFinite() == true
+                else -> primitive.isString
+            }
+        ) { "Initial value must match the $type variable type" }
         require(description.length <= 2_000) { "Variable description is too long" }
         val project = readProject(db, projectId)
         checkVersion(project.version, expectedVersion)
@@ -1105,6 +1112,9 @@ class ReedCore(
         }
         return db.insertOrThrow("mutations", null, values)
     }
+
+    /** Runs several core mutations as one SQLite transaction, so a failed step leaves no partial change. */
+    fun <T> atomically(block: () -> T): T = transaction { block() }
 
     private fun <T> transaction(block: (SQLiteDatabase) -> T): T {
         val db = helper.writableDatabase
