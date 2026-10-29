@@ -8,6 +8,9 @@ const DEFAULT_MCP_TIMEOUT_MS = 45_000;
 const DEFAULT_POLL_TIMEOUT_MS = 20_000;
 const CHANNEL_PATTERN = /^[A-Za-z0-9_-]{20,96}$/u;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,192}$/u;
+const DEFAULT_MAX_CHANNELS = 5_000;
+const DEFAULT_CONNECTS_PER_MINUTE = 30;
+const MAX_PENDING_PER_CHANNEL = 16;
 
 interface BridgeEnvelope {
   requestId: string;
@@ -23,6 +26,11 @@ interface PendingRequest {
 interface PollWaiter {
   response: ServerResponse;
   timer: NodeJS.Timeout;
+}
+
+interface RateWindow {
+  startedAt: number;
+  count: number;
 }
 
 interface Channel {
@@ -56,6 +64,12 @@ export interface ReedRelayOptions {
   mcpTimeoutMs?: number;
   pollTimeoutMs?: number;
   now?: () => number;
+  /** Upper bound on simultaneously claimed channels, so unauthenticated connects cannot exhaust memory. */
+  maxChannels?: number;
+  /** Per-client limit on /bridge/v1/connect calls in a rolling minute. */
+  connectsPerMinute?: number;
+  /** Read the client address from X-Forwarded-For (set only behind a trusted proxy such as Lightsail). */
+  trustProxy?: boolean;
 }
 
 export function createRelayServer(options: ReedRelayOptions = {}): Server {
@@ -63,11 +77,17 @@ export function createRelayServer(options: ReedRelayOptions = {}): Server {
   const mcpTimeoutMs = options.mcpTimeoutMs ?? DEFAULT_MCP_TIMEOUT_MS;
   const pollTimeoutMs = options.pollTimeoutMs ?? DEFAULT_POLL_TIMEOUT_MS;
   const now = options.now ?? Date.now;
+  const maxChannels = options.maxChannels ?? DEFAULT_MAX_CHANNELS;
+  const connectsPerMinute = options.connectsPerMinute ?? DEFAULT_CONNECTS_PER_MINUTE;
+  const connectWindows = new Map<string, RateWindow>();
 
   const cleanup = setInterval(() => {
     const timestamp = now();
     for (const [channelId, channel] of channels) {
       if (channel.expiresAt <= timestamp) removeChannel(channels, channelId, "Agent Access expired");
+    }
+    for (const [client, window] of connectWindows) {
+      if (timestamp - window.startedAt >= 60_000) connectWindows.delete(client);
     }
   }, 30_000);
   cleanup.unref();
@@ -80,6 +100,7 @@ export function createRelayServer(options: ReedRelayOptions = {}): Server {
         return sendJson(response, 200, { ok: true, service: "reed-relay" });
       }
       if (url.pathname === "/bridge/v1/connect" && request.method === "POST") {
+        limitConnects(connectWindows, clientAddress(request, options.trustProxy === true), connectsPerMinute, now());
         const deviceToken = bearerToken(request);
         const body = requireConnectBody(await readJson(request));
         requireToken(deviceToken, "device token");
@@ -91,6 +112,7 @@ export function createRelayServer(options: ReedRelayOptions = {}): Server {
           throw new HttpError(409, "Channel is already claimed");
         }
         if (existing) removeChannel(channels, body.channelId, "Tablet reconnected");
+        else if (channels.size >= maxChannels) throw new HttpError(503, "The relay is at capacity. Try again shortly.");
         channels.set(body.channelId, {
           connectorDigest: digest(body.connectorToken),
           deviceDigest: digest(deviceToken),
@@ -107,7 +129,7 @@ export function createRelayServer(options: ReedRelayOptions = {}): Server {
         const channel = requireDeviceChannel(channels, body.channelId, bearerToken(request), now());
         channel.lastDeviceSeenAt = now();
         const queued = channel.queue.shift();
-        if (queued) return sendJson(response, 200, queued);
+        if (queued) return sendEnvelope(channel, response, queued);
         channel.waiter?.response.destroy();
         if (channel.waiter) clearTimeout(channel.waiter.timer);
         const timer = setTimeout(() => {
@@ -115,7 +137,9 @@ export function createRelayServer(options: ReedRelayOptions = {}): Server {
           if (!response.writableEnded) response.writeHead(204).end();
         }, pollTimeoutMs);
         channel.waiter = { response, timer };
-        request.once("aborted", () => {
+        // The poll body is already consumed, so "aborted" never fires; "close" is the only reliable signal
+        // that the tablet dropped this long-poll.
+        response.once("close", () => {
           if (channel.waiter?.response === response) {
             clearTimeout(timer);
             channel.waiter = undefined;
@@ -154,15 +178,25 @@ export function createRelayServer(options: ReedRelayOptions = {}): Server {
         if (now() - channel.lastDeviceSeenAt > pollTimeoutMs * 2 + 5_000) {
           throw new HttpError(503, "Reed is offline. Open Reed and enable Agent Access.");
         }
-        if (channel.queue.length >= 16) throw new HttpError(429, "Too many pending Reed requests");
+        if (channel.pending.size >= MAX_PENDING_PER_CHANNEL) throw new HttpError(429, "Too many pending Reed requests");
         const message = await readJson(request);
         const requestId = randomUUID();
         const result = new Promise<unknown>((resolve, reject) => {
           const timer = setTimeout(() => {
             channel.pending.delete(requestId);
+            dropQueued(channel, requestId);
             reject(new HttpError(504, "Reed did not answer before the request expired"));
           }, mcpTimeoutMs);
           channel.pending.set(requestId, { resolve, reject, timer });
+        });
+        response.once("close", () => {
+          if (response.writableFinished) return;
+          const pending = channel.pending.get(requestId);
+          if (!pending) return;
+          clearTimeout(pending.timer);
+          channel.pending.delete(requestId);
+          dropQueued(channel, requestId);
+          pending.reject(new HttpError(499, "Client closed the request"));
         });
         deliver(channel, { requestId, request: message });
         const deviceResponse = await result;
@@ -187,13 +221,53 @@ export function createRelayServer(options: ReedRelayOptions = {}): Server {
 
 function deliver(channel: Channel, envelope: BridgeEnvelope): void {
   const waiter = channel.waiter;
-  if (!waiter || waiter.response.writableEnded) {
+  if (!waiter || !responseUsable(waiter.response)) {
+    if (waiter) {
+      clearTimeout(waiter.timer);
+      channel.waiter = undefined;
+    }
     channel.queue.push(envelope);
     return;
   }
   clearTimeout(waiter.timer);
   channel.waiter = undefined;
-  sendJson(waiter.response, 200, envelope);
+  sendEnvelope(channel, waiter.response, envelope);
+}
+
+function responseUsable(response: ServerResponse): boolean {
+  return !response.writableEnded && !response.destroyed && response.socket?.writable !== false;
+}
+
+/** Sends an envelope to a poll and puts it back at the front of the queue if the poll dies before it is flushed. */
+function sendEnvelope(channel: Channel, response: ServerResponse, envelope: BridgeEnvelope): void {
+  response.once("close", () => {
+    if (!response.writableFinished && channel.pending.has(envelope.requestId) && !channel.queue.includes(envelope)) channel.queue.unshift(envelope);
+  });
+  sendJson(response, 200, envelope);
+}
+
+function dropQueued(channel: Channel, requestId: string): void {
+  const index = channel.queue.findIndex((envelope) => envelope.requestId === requestId);
+  if (index >= 0) channel.queue.splice(index, 1);
+}
+
+function clientAddress(request: IncomingMessage, trustProxy: boolean): string {
+  if (trustProxy) {
+    const forwarded = request.headers["x-forwarded-for"];
+    const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return request.socket.remoteAddress ?? "unknown";
+}
+
+function limitConnects(windows: Map<string, RateWindow>, client: string, limit: number, now: number): void {
+  const window = windows.get(client);
+  if (!window || now - window.startedAt >= 60_000) {
+    windows.set(client, { startedAt: now, count: 1 });
+    return;
+  }
+  window.count += 1;
+  if (window.count > limit) throw new HttpError(429, "Too many Agent Access connections from this address. Try again in a minute.");
 }
 
 function removeChannel(channels: Map<string, Channel>, channelId: string, reason: string): void {
@@ -328,6 +402,9 @@ class HttpError extends Error {
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
   const host = process.env.HOST ?? "127.0.0.1";
   const port = Number(process.env.PORT ?? "8787");
-  const relay = createRelayServer();
+  const relay = createRelayServer({
+    trustProxy: process.env.RELAY_TRUST_PROXY === "1",
+    maxChannels: process.env.RELAY_MAX_CHANNELS ? Number(process.env.RELAY_MAX_CHANNELS) : undefined,
+  });
   relay.listen(port, host, () => process.stdout.write(`Reed relay listening on ${host}:${port}\n`));
 }
