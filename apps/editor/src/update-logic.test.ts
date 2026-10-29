@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fetchAllowedUpdate, installLocationProblem, isAllowedUpdateUrl, isNewerVersion, parseChecksums, parseRelease, updateAssetName } from "./update-logic.js";
+import { installLocationProblem, isAllowedUpdateUrl, isNewerVersion, parseChecksums, parseRelease, updateAssetName } from "./update-logic.js";
 
 describe("desktop update logic", () => {
   it("only offers stable releases that are strictly newer", () => {
@@ -50,20 +50,5 @@ describe("desktop update logic", () => {
     expect(installLocationProblem("/Volumes/Reed/Reed.app", "darwin")).toMatch(/disk image/);
     expect(installLocationProblem("/private/var/folders/x/AppTranslocation/y/d/Reed.app", "darwin")).toMatch(/temporary location/);
     expect(installLocationProblem("C:\\Users\\k\\Reed", "win32")).toBeNull();
-  });
-
-  it("follows redirects only through allowed hosts, even when the response has no url", async () => {
-    const hops: Record<string, Response> = {
-      "https://github.com/is2b007/Reed/releases/download/v0.2.1/SHA256SUMS.txt": new Response(null, { status: 302, headers: { location: "https://objects.githubusercontent.com/asset?sig=1" } }),
-      "https://objects.githubusercontent.com/asset?sig=1": new Response("ok", { status: 200 }),
-      "https://github.com/evil": new Response(null, { status: 301, headers: { location: "https://evil.example/x" } }),
-    };
-    const seen: Array<RequestInit["redirect"]> = [];
-    const fetcher = async (url: string, init: RequestInit) => { seen.push(init.redirect); return hops[url] ?? new Response(null, { status: 404 }); };
-    const response = await fetchAllowedUpdate(fetcher, "https://github.com/is2b007/Reed/releases/download/v0.2.1/SHA256SUMS.txt");
-    expect(await response.text()).toBe("ok");
-    expect(seen).toEqual(["manual", "manual"]);
-    await expect(fetchAllowedUpdate(fetcher, "https://github.com/evil")).rejects.toThrow(/redirected to an unexpected host/);
-    await expect(fetchAllowedUpdate(fetcher, "https://evil.example/x")).rejects.toThrow(/Refusing/);
   });
 });

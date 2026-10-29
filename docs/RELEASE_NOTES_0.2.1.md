@@ -4,7 +4,7 @@ A fix for the desktop updater introduced in 0.2.0.
 
 ## Fixes
 
-- **Check for Updates works.** In 0.2.0 every check failed with "The update was redirected to an unexpected host". Reed now follows GitHub's redirects itself and checks each hop against the GitHub allowlist.
+- **Check for Updates works.** In 0.2.0 every check failed with "The update was redirected to an unexpected host". Reed now checks every request and redirect hop against the GitHub allowlist as it happens, instead of reading the final address afterwards.
 - macOS release builds are notarized with `notarytool`, and stapling retries when Apple's servers are unreachable.
 
 ## Updating from 0.2.0
