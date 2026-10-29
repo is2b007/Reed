@@ -2238,7 +2238,7 @@ private fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, String
     var name by remember { mutableStateOf("") }
     var slug by remember { mutableStateOf("") }
     var slugEdited by remember { mutableStateOf(false) }
-    var languages by remember { mutableStateOf(setOf("en", "el", "it", "de", "griko")) }
+    var languages by remember { mutableStateOf(setOf("en")) }
     var sourceLanguage by remember { mutableStateOf("en") }
     var sourceMenuOpen by remember { mutableStateOf(false) }
     val nameFocus = remember { FocusRequester() }
@@ -2306,6 +2306,7 @@ private fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, String
                                 Text(
                                     when {
                                         slug.isBlank() -> "Generated from the project name."
+                                        slug.length < 2 -> "Use at least 2 characters."
                                         !slugValid -> "Use lowercase letters, numbers, and single hyphens."
                                         else -> "Used for local exports and optional Git folders."
                                     },

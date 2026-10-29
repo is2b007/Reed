@@ -10,3 +10,8 @@ A fix for the desktop updater introduced in 0.2.0.
 ## Updating from 0.2.0
 
 0.2.0 cannot update itself past this bug, so download 0.2.1 once by hand: on macOS open the DMG and drag Reed into Applications (choose Replace); on Windows unzip over the old folder. From 0.2.1 on, **Check for Updates** installs new versions for you. Android installs over 0.2.0 directly.
+
+## Android
+
+- New projects start with English only instead of a preset language list.
+- A one-character project slug now says it needs at least 2 characters.
