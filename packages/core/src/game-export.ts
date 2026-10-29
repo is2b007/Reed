@@ -318,7 +318,12 @@ function buildYarnScripts(reed: ReedProject, defaultLanguage: string): { scripts
         push(`-> ${yarnText(optionText) || "…"} #line:${optionKey}`, optionKey, title);
         push(`    <<jump ${titles.get(option.id)}>>`);
       }
-      const next = children.find((child) => child.kind !== "choice");
+      const followers = children.filter((child) => child.kind !== "choice");
+      const [next, ...alternates] = followers;
+      // Yarn has no Lua conditions, so only the highest-priority follower is jumped to; note the rest for the writer.
+      for (const alternate of options.length === 0 ? alternates : followers) {
+        push(`// Reed also links to ${titles.get(alternate.id)}${alternate.conditions.trim() ? ` when ${alternate.conditions.replace(/\r?\n/gu, " ")}` : ""}`);
+      }
       if (options.length === 0) push(next ? `<<jump ${titles.get(next.id)}>>` : "<<stop>>");
       push("===");
     }

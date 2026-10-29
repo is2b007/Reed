@@ -241,7 +241,10 @@ function responseUsable(response: ServerResponse): boolean {
 /** Sends an envelope to a poll and puts it back at the front of the queue if the poll dies before it is flushed. */
 function sendEnvelope(channel: Channel, response: ServerResponse, envelope: BridgeEnvelope): void {
   response.once("close", () => {
-    if (!response.writableFinished && channel.pending.has(envelope.requestId) && !channel.queue.includes(envelope)) channel.queue.unshift(envelope);
+    if (response.writableFinished || !channel.pending.has(envelope.requestId) || channel.queue.includes(envelope)) return;
+    // Hand it straight to a poll that is already waiting, otherwise put it first in line for the next one.
+    if (channel.waiter && responseUsable(channel.waiter.response)) deliver(channel, envelope);
+    else channel.queue.unshift(envelope);
   });
   sendJson(response, 200, envelope);
 }
@@ -393,6 +396,11 @@ function sendJson(response: ServerResponse, status: number, body: unknown): void
   response.end(serialized);
 }
 
+function positiveInteger(value: string | undefined): number | undefined {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 class HttpError extends Error {
   constructor(readonly status: number, message: string) {
     super(message);
@@ -404,7 +412,7 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
   const port = Number(process.env.PORT ?? "8787");
   const relay = createRelayServer({
     trustProxy: process.env.RELAY_TRUST_PROXY === "1",
-    maxChannels: process.env.RELAY_MAX_CHANNELS ? Number(process.env.RELAY_MAX_CHANNELS) : undefined,
+    maxChannels: positiveInteger(process.env.RELAY_MAX_CHANNELS),
   });
   relay.listen(port, host, () => process.stdout.write(`Reed relay listening on ${host}:${port}\n`));
 }

@@ -952,6 +952,8 @@ export class ReedProject {
       const check = new Database(temporary);
       try {
         if (check.pragma("integrity_check", { simple: true }) !== "ok") throw new ConflictError("Selected backup failed SQLite integrity checking", { backupId });
+        // Bring an older snapshot up to the current schema so connections that stay open keep working.
+        runMigrations(check);
         // Keep the current state restorable, and carry every known backup into the restored database so
         // later pruning never mistakes newer backups for orphans.
         const safety = await this.createBackup("named", "Before restore");
