@@ -16,6 +16,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -91,6 +92,7 @@ import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
@@ -1311,16 +1313,16 @@ private fun GraphNode(
             Text(
                 node.lineId,
                 fontFamily = FontFamily.Monospace,
-                fontSize = ReedType.micro,
+                fontSize = ReedType.label,
                 lineHeight = 14.sp,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                overflow = TextOverflow.MiddleEllipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(if (node.kind == NodeKind.GROUP) 3.dp else 7.dp))
             if (node.kind == NodeKind.GROUP) {
                 Text(
-                    "Routes dialogue without spoken text",
+                    "Routing only · no spoken text",
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1346,14 +1348,14 @@ private fun GraphNode(
                         node.lineStatus.displayName,
                         modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(3.dp))
                             .padding(horizontal = 5.dp, vertical = 2.dp),
-                        fontSize = ReedType.micro,
-                        lineHeight = 13.sp,
+                        fontSize = ReedType.label,
+                        lineHeight = 14.sp,
                         fontWeight = FontWeight.Medium,
                     )
                     Spacer(Modifier.width(5.dp))
                     Text(
                         "Voice ${node.voiceStatus.name.lowercase().replace('_', ' ')}",
-                        fontSize = ReedType.micro,
+                        fontSize = ReedType.label,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1381,12 +1383,12 @@ private fun GraphNode(
             contentAlignment = Alignment.Center,
         ) {
             Box(
-                Modifier.size(if (hovered || selected || linkOrigin || connectionTarget) 18.dp else 15.dp)
-                    .background(if (linkOrigin) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surface)
+                Modifier.size(if (hovered || selected || linkOrigin || connectionTarget) 24.dp else 20.dp)
+                    .background(if (linkOrigin) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surface, CircleShape)
                     .border(
                         2.dp,
                         if (hovered || selected || linkOrigin || connectionTarget) borderColor else MaterialTheme.colorScheme.outline,
-                        RoundedCornerShape(2.dp),
+                        CircleShape,
                     ),
                 )
         }
@@ -1640,18 +1642,18 @@ private fun TranslationWorkspace(state: ReedUiState, viewModel: ReedViewModel, m
                         .padding(vertical = 12.dp)
                     if (stacked) {
                         Column(itemModifier) {
-                            Text(node.lineId, fontFamily = FontFamily.Monospace, fontSize = ReedType.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(node.lineId, fontFamily = FontFamily.Monospace, fontSize = ReedType.caption, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                             Spacer(Modifier.height(7.dp))
                             Text("SOURCE", fontSize = ReedType.label, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(source.ifBlank { "—" }, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                            Text(source.ifBlank { "No source text" }, maxLines = 3, overflow = TextOverflow.Ellipsis, color = if (source.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
                             Spacer(Modifier.height(7.dp))
                             Text(languageName(state.selectedLanguage).uppercase(), fontSize = ReedType.label, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(target.ifBlank { "⚠ Missing" }, maxLines = 3, overflow = TextOverflow.Ellipsis, fontWeight = if (target.isBlank()) FontWeight.Bold else null, color = if (target.isBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
                         }
                     } else {
                         Row(itemModifier) {
-                            Text(node.lineId, Modifier.width(150.dp), fontFamily = FontFamily.Monospace, fontSize = ReedType.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(source.ifBlank { "—" }, Modifier.weight(1f), maxLines = 3)
+                            Text(node.lineId, Modifier.width(200.dp), fontFamily = FontFamily.Monospace, fontSize = ReedType.body, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                            Text(source.ifBlank { "No source text" }, Modifier.weight(1f), maxLines = 3, color = if (source.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
                             Spacer(Modifier.width(18.dp))
                             Text(target.ifBlank { "⚠ Missing" }, Modifier.weight(1f), maxLines = 3, fontWeight = if (target.isBlank()) FontWeight.Bold else null, color = if (target.isBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
                         }
@@ -2011,6 +2013,7 @@ private fun AgentAccessWorkspace(
                     } else {
                         "HTTPS origin only. This is not the URL pasted into Claude."
                     },
+                    fontSize = ReedType.caption,
                 )
             },
             singleLine = true,
@@ -2202,7 +2205,7 @@ private fun ProjectSettingsWorkspace(state: ReedUiState, viewModel: ReedViewMode
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Languages", fontWeight = FontWeight.SemiBold)
-                    Text("IETF BCP 47 tags · ${languages.size} enabled", fontFamily = FontFamily.Monospace, fontSize = ReedType.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("IETF BCP 47 tags · ${languages.size} enabled", fontFamily = FontFamily.Monospace, fontSize = ReedType.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 OutlinedButton(onClick = { setLanguages(GameLanguages.gameMarketPreset().toSet()) }) { Text("Game preset") }
             }
@@ -2473,6 +2476,11 @@ private fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, String
                             onClick = { onCreate(name.trim(), slug, languages.toList().sorted(), sourceLanguage) },
                             enabled = canCreate,
                             shape = RoundedCornerShape(5.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                            border = if (canCreate) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         ) { Text("Create project") }
                     }
                 }
@@ -2498,7 +2506,7 @@ private fun LanguageCheckbox(
         Spacer(Modifier.width(10.dp))
         Column {
             Text(languageName(code), maxLines = 1)
-            Text(code, fontFamily = FontFamily.Monospace, fontSize = ReedType.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(code, fontFamily = FontFamily.Monospace, fontSize = ReedType.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
