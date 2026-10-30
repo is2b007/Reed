@@ -417,50 +417,56 @@ function ProjectSettingsDialog({ state, onClose, onSaved }: { state: EditorBoots
 
 function updateStatusText(update: UpdateState): string {
   if (update.status === "checking") return "Checking GitHub for a newer release…";
-  if (update.status === "current") return `Reed ${update.currentVersion} is the latest version.`;
+  if (update.status === "current") return "Up to date.";
   if (update.status === "available") return `Reed ${update.latestVersion} is available. You have ${update.currentVersion}.`;
   if (update.status === "downloading") return `Downloading Reed ${update.latestVersion}… ${Math.round((update.progress ?? 0) * 100)}%`;
   if (update.status === "installing") return update.message ?? "Installing…";
   if (update.status === "error") return update.message ?? "The update check failed.";
-  return `You have Reed ${update.currentVersion}.`;
+  return "Not checked yet.";
+}
+
+function SettingRow({ title, description, children }: { title: string; description?: React.ReactNode; children?: React.ReactNode }) {
+  return <div className="pref-row"><div className="pref-row-text"><strong>{title}</strong>{description && <small>{description}</small>}</div>{children && <div className="pref-row-control">{children}</div>}</div>;
+}
+
+function SettingSwitch({ label, checked, disabled, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange(checked: boolean): void }) {
+  return <input type="checkbox" role="switch" className="pref-switch" aria-label={label} checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />;
 }
 
 function UpdateSettings({ update }: { update: UpdateState }) {
   const [error, setError] = useState("");
   const busy = update.status === "checking" || update.status === "downloading" || update.status === "installing";
   const act = (action: () => Promise<unknown>) => { setError(""); void action().catch((value) => setError(message(value))); };
-  return <section className="settings-section update-settings" aria-labelledby="update-settings-heading"><h3 id="update-settings-heading">Updates</h3>
-    <p role="status" className={update.status === "error" ? "update-status bad" : "update-status"}>{updateStatusText(update)}</p>
+  return <section className="pref-pane" aria-labelledby="update-settings-heading"><h3 id="update-settings-heading">Updates</h3>
+    <SettingRow title={update.status === "available" ? `Reed ${update.latestVersion} is available` : `Reed ${update.currentVersion}`} description={<span role="status" className={update.status === "error" ? "bad" : undefined}>{update.status === "available" ? `You have ${update.currentVersion}.` : updateStatusText(update)}{update.releaseUrl && (update.status === "available" || update.status === "error") && <> <button type="button" className="pref-link" onClick={() => act(() => window.reed.openUpdateRelease())}>Release notes</button></>}</span>}>
+      {update.status === "available"
+        ? <button type="button" className="primary" disabled={!update.canInstall || busy} title={update.canInstall ? undefined : "This copy of Reed cannot replace itself. Download the update from the release page."} onClick={() => act(() => window.reed.installUpdate())}>Install and restart</button>
+        : <button type="button" disabled={busy} onClick={() => act(() => window.reed.checkForUpdates())}>{update.status === "checking" ? "Checking…" : "Check for updates"}</button>}
+    </SettingRow>
     {update.status === "downloading" && <progress max={1} value={update.progress ?? 0} aria-label="Update download progress" />}
-    <div className="metadata-actions">
-      {update.releaseUrl && (update.status === "available" || update.status === "error") && <button type="button" className="update-notes" onClick={() => act(() => window.reed.openUpdateRelease())}>Release page</button>}
-      <button type="button" disabled={busy} onClick={() => act(() => window.reed.checkForUpdates())}>{update.status === "checking" ? "Checking…" : "Check for updates"}</button>
-      {update.status === "available" && <button type="button" className="primary" disabled={!update.canInstall} title={update.canInstall ? undefined : "This copy of Reed cannot replace itself. Download the update from the release page."} onClick={() => act(() => window.reed.installUpdate())}>Install and restart</button>}
-    </div>
-    <label className="update-auto"><input type="checkbox" checked={update.autoCheck} onChange={(event) => act(() => window.reed.setAutoUpdateCheck(event.target.checked))} /><span><strong>Check automatically</strong><small>When on, Reed asks GitHub for new releases at launch and twice a day. Nothing installs without your OK.</small></span></label>
-    <p className="form-help">Checking contacts GitHub only when you press the button or turn on automatic checks. Updates are verified against the release checksums, and your projects are not touched.</p>
+    <SettingRow title="Check automatically" description="At launch and twice a day. Nothing installs without your OK."><SettingSwitch label="Check for updates automatically" checked={update.autoCheck} onChange={(checked) => act(() => window.reed.setAutoUpdateCheck(checked))} /></SettingRow>
+    <p className="pref-note">Updates are checksum-verified and never touch your projects.</p>
     {error && <div className="error-banner" role="alert">{error}</div>}
   </section>;
 }
 
 const autoSyncIntervalOptions = [1, 5, 10, 15, 30, 60];
 
-function autoSyncSummary(autoSync: AutoSyncState): string {
-  if (!autoSync.enabled) return "Git autosave is off. Turn it on in Reed settings.";
+function autoSyncSummary(autoSync: AutoSyncState, inSettings = false): string {
+  if (!autoSync.enabled) return inSettings ? "Off." : "Git autosave is off. Turn it on in Reed settings.";
   if (autoSync.running) return "Autosaving to Git…";
   const when = autoSync.lastRunAt ? ` · ${new Date(autoSync.lastRunAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "";
-  return autoSync.message ? `${autoSync.message}${when}` : `Git autosave every ${autoSync.intervalMinutes} min.`;
+  return autoSync.message ? `${autoSync.message}${when}` : inSettings ? "Nothing autosaved yet in this session." : `Git autosave every ${autoSync.intervalMinutes} min.`;
 }
 
 function AutoSyncSettingsSection({ autoSync }: { autoSync: AutoSyncState }) {
   const [error, setError] = useState("");
   const act = (action: () => Promise<unknown>) => { setError(""); void action().catch((value) => setError(message(value))); };
-  return <section className="settings-section update-settings" aria-labelledby="autosync-settings-heading"><h3 id="autosync-settings-heading">Git autosave</h3>
-    <label className="update-auto"><input type="checkbox" checked={autoSync.enabled} onChange={(event) => act(() => window.reed.setAutoSync({ enabled: event.target.checked }))} /><span><strong>Commit and push automatically</strong><small>Every edit is already saved on this Mac. When this is on, Reed also commits the open story to its local history on a timer, when you close it, and when you quit, then pushes to the project’s remote if it has one.</small></span></label>
-    <div className="metadata-grid"><label>Every<select value={autoSync.intervalMinutes} disabled={!autoSync.enabled} onChange={(event) => act(() => window.reed.setAutoSync({ intervalMinutes: Number(event.target.value) }))}>{autoSyncIntervalOptions.map((minutes) => <option key={minutes} value={minutes}>{minutes === 1 ? "1 minute" : `${minutes} minutes`}</option>)}</select></label></div>
-    <p role="status" className={autoSync.lastOutcome === "error" || autoSync.lastOutcome === "push-failed" ? "update-status bad" : "update-status"}>{autoSyncSummary(autoSync)}</p>
-    <div className="metadata-actions"><button type="button" disabled={autoSync.running} onClick={() => act(() => window.reed.runAutoSync())}>{autoSync.running ? "Saving…" : "Commit and push now"}</button></div>
-    <p className="form-help">Projects without local history are left alone. Reed never force-pushes: if the remote has newer checkpoints, it keeps committing locally and waits for you to review them in History.</p>
+  return <section className="pref-pane" aria-labelledby="autosync-settings-heading"><h3 id="autosync-settings-heading">Git autosave</h3>
+    <SettingRow title="Commit and push automatically" description="Commits the open story to its local history on a timer, when you close it and when you quit, then pushes if the project has a remote."><SettingSwitch label="Commit and push automatically" checked={autoSync.enabled} onChange={(enabled) => act(() => window.reed.setAutoSync({ enabled }))} /></SettingRow>
+    <SettingRow title="Interval" description="How often Reed commits while you work."><select aria-label="Autosave interval" value={autoSync.intervalMinutes} disabled={!autoSync.enabled} onChange={(event) => act(() => window.reed.setAutoSync({ intervalMinutes: Number(event.target.value) }))}>{autoSyncIntervalOptions.map((minutes) => <option key={minutes} value={minutes}>{minutes === 1 ? "Every minute" : `Every ${minutes} minutes`}</option>)}</select></SettingRow>
+    <SettingRow title="Last autosave" description={<span role="status" className={autoSync.lastOutcome === "error" || autoSync.lastOutcome === "push-failed" ? "bad" : undefined}>{autoSyncSummary(autoSync, true)}</span>}><button type="button" disabled={autoSync.running} onClick={() => act(() => window.reed.runAutoSync())}>{autoSync.running ? "Saving…" : "Commit and push now"}</button></SettingRow>
+    <p className="pref-note">Edits always save locally. Reed never force-pushes.</p>
     {error && <div className="error-banner" role="alert">{error}</div>}
   </section>;
 }
@@ -471,9 +477,33 @@ function UpdateBanner({ update, onOpen }: { update: UpdateState | null; onOpen()
   return <aside className="update-banner" role="status"><span>{update.status === "available" ? `Reed ${update.latestVersion} is available.` : updateStatusText(update)}</span>{update.status === "available" && <><button type="button" className="primary" onClick={onOpen}>View update</button><button type="button" aria-label="Dismiss update notice" onClick={() => setDismissed(update.latestVersion ?? null)}>×</button></>}</aside>;
 }
 
+type PreferencesPane = "appearance" | "autosave" | "updates";
+
 function PreferencesDialog({ appearance, update, autoSync, onAppearance, onClose }: { appearance: AppearanceState; update: UpdateState | null; autoSync: AutoSyncState | null; onAppearance(preference: AppearancePreference): Promise<void>; onClose(): void }) {
   const [error, setError] = useState("");
-  return <ModalDialog labelledBy="preferences-title" onClose={onClose}><section className="preferences-dialog"><header><div><p className="eyebrow">Reed settings</p><h2 id="preferences-title">Appearance, autosave & updates</h2></div><button type="button" aria-label="Close Reed settings" onClick={onClose}>×</button></header><fieldset><legend>Theme</legend>{appearanceOptions.map((option) => <label key={option.value} className={appearance.preference === option.value ? "selected" : ""}><input type="radio" name="appearance" value={option.value} checked={appearance.preference === option.value} onChange={() => { setError(""); void onAppearance(option.value).catch((value) => setError(message(value))); }} /><span><strong>{option.label}</strong><small>{option.description}</small></span></label>)}</fieldset><p className="form-help">This preference is stored only on this Mac. Automatic updates when macOS changes appearance.</p>{autoSync && <AutoSyncSettingsSection autoSync={autoSync} />}{update && <UpdateSettings update={update} />}{error && <div className="error-banner" role="alert">{error}</div>}<div className="metadata-actions"><button type="button" className="primary" onClick={onClose}>Done</button></div></section></ModalDialog>;
+  const [pane, setPane] = useState<PreferencesPane>(update?.status === "available" ? "updates" : "appearance");
+  const panes: Array<{ id: PreferencesPane; label: string; badge?: boolean }> = [
+    { id: "appearance", label: "Appearance" },
+    ...(autoSync ? [{ id: "autosave" as const, label: "Git autosave" }] : []),
+    ...(update ? [{ id: "updates" as const, label: "Updates", badge: update.status === "available" }] : []),
+  ];
+  return <ModalDialog labelledBy="preferences-title" onClose={onClose}><section className="preferences-dialog">
+    <nav className="pref-nav" aria-label="Settings sections"><h2 id="preferences-title">Settings</h2>
+      {panes.map((item) => <button key={item.id} type="button" className={pane === item.id ? "active" : ""} aria-current={pane === item.id ? "page" : undefined} onClick={() => setPane(item.id)}>{item.label}{item.badge && <i className="pref-badge" aria-label="Update available" />}</button>)}
+      {update && <span className="pref-version">Reed {update.currentVersion}</span>}
+    </nav>
+    <div className="pref-content">
+      <button type="button" className="pref-close" aria-label="Close Reed settings" onClick={onClose}>×</button>
+      {pane === "appearance" && <section className="pref-pane" aria-labelledby="appearance-settings-heading"><h3 id="appearance-settings-heading">Appearance</h3>
+        <div className="pref-row pref-row-stack"><div className="pref-row-text"><strong>Theme</strong><small>Stored only on this Mac. Automatic follows macOS.</small></div>
+          <div className="pref-themes" role="radiogroup" aria-label="Theme">{appearanceOptions.map((option) => <label key={option.value} className={appearance.preference === option.value ? "selected" : ""}><input type="radio" name="appearance" value={option.value} checked={appearance.preference === option.value} onChange={() => { setError(""); void onAppearance(option.value).catch((value) => setError(message(value))); }} /><span className={`pref-theme-preview ${option.value}`} aria-hidden="true"><i /><i /></span><span>{option.label}</span></label>)}</div>
+        </div>
+      </section>}
+      {pane === "autosave" && autoSync && <AutoSyncSettingsSection autoSync={autoSync} />}
+      {pane === "updates" && update && <UpdateSettings update={update} />}
+      {error && <div className="error-banner" role="alert">{error}</div>}
+    </div>
+  </section></ModalDialog>;
 }
 
 function Navigator({ snapshot, selectedConversationId, open, onConversation, onScene, onProjectSettings, onClose }: { snapshot: ProjectSnapshot; selectedConversationId: string | null; open: boolean; onConversation(id: string): void; onScene(id: string): void; onProjectSettings(): void; onClose(): void }) {
