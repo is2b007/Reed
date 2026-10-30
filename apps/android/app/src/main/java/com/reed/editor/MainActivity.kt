@@ -1279,7 +1279,7 @@ private fun GraphNode(
                 )
             }
     ) {
-        Column(Modifier.fillMaxSize().padding(start = 10.dp, top = 8.dp, end = 24.dp, bottom = 8.dp)) {
+        Column(Modifier.fillMaxSize().padding(start = 10.dp, top = 8.dp, end = if (node.kind == NodeKind.GROUP) 40.dp else 24.dp, bottom = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(node.kind.nodeIcon, null, Modifier.size(15.dp), tint = if (linkOrigin) borderColor else speakerAccent)
                 Spacer(Modifier.width(5.dp))
