@@ -1324,7 +1324,8 @@ private fun GraphNode(
                 Text(
                     "Routing only · no spoken text",
                     modifier = Modifier.weight(1f),
-                    maxLines = 1,
+                    maxLines = 2,
+                    lineHeight = 15.sp,
                     overflow = TextOverflow.Ellipsis,
                     fontSize = ReedType.label,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
