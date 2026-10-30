@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
@@ -53,6 +54,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.CallSplit
 import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowBack
@@ -70,8 +72,8 @@ import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DataObject
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.LightMode
@@ -159,6 +161,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
@@ -291,6 +294,7 @@ private fun ReedRoot(
             )
         }
         if (state.commandPaletteOpen) CommandPalette(state, viewModel)
+        BackHandler(enabled = state.commandPaletteOpen) { viewModel.toggleCommandPalette(false) }
     }
 }
 
@@ -544,7 +548,7 @@ private fun WorkspaceRail(selected: Workspace, viewModel: ReedViewModel) {
                     .clip(RoundedCornerShape(4.dp))
                     .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
                     .then(
-                        if (isSelected) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp))
+                        if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp))
                         else Modifier
                     )
                     .clickable { viewModel.setWorkspace(workspace) }
@@ -660,13 +664,13 @@ private fun AddNodeStrip(state: ReedUiState, viewModel: ReedViewModel, onEdit: (
                 Text("ADD", fontSize = ReedType.label, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 AddNodeButton("Line", "Spoken dialogue or narration", Icons.Outlined.Add, compact) { addNode(NodeKind.LINE) }
                 AddNodeButton("Choice", "A player-selectable response", Icons.Outlined.Link, compact) { addNode(NodeKind.CHOICE) }
-                AddNodeButton("Junction", "Routes flow without spoken text", Icons.Outlined.Group, compact) { addNode(NodeKind.GROUP) }
+                AddNodeButton("Junction", "Routes flow without spoken text", Icons.AutoMirrored.Outlined.CallSplit, compact) { addNode(NodeKind.GROUP) }
                 if (state.selectedNode != null) {
                     if (compact) {
-                        TooltipIconButton("Edit the selected node", Icons.Outlined.Save, onEdit)
+                        TooltipIconButton("Edit the selected node", Icons.Outlined.Edit, onEdit)
                     } else {
                         OutlinedButton(onClick = onEdit, shape = RoundedCornerShape(5.dp)) {
-                            Icon(Icons.Outlined.Save, null, Modifier.size(17.dp))
+                            Icon(Icons.Outlined.Edit, null, Modifier.size(17.dp))
                             Spacer(Modifier.width(5.dp))
                             Text("Edit")
                         }
@@ -1231,7 +1235,11 @@ private fun GraphNode(
             .clip(RoundedCornerShape(4.dp))
             .background(MaterialTheme.colorScheme.surface)
             .border(
-                if (selected || hovered || linkOrigin || connectionTarget) 2.dp else 1.dp,
+                when {
+                    selected || linkOrigin || connectionTarget -> 3.dp
+                    hovered -> 2.dp
+                    else -> 1.dp
+                },
                 borderColor,
                 RoundedCornerShape(4.dp),
             )
@@ -1373,7 +1381,7 @@ private fun GraphNode(
             contentAlignment = Alignment.Center,
         ) {
             Box(
-                Modifier.size(if (hovered || selected || linkOrigin || connectionTarget) 14.dp else 11.dp)
+                Modifier.size(if (hovered || selected || linkOrigin || connectionTarget) 18.dp else 15.dp)
                     .background(if (linkOrigin) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surface)
                     .border(
                         2.dp,
@@ -1638,14 +1646,14 @@ private fun TranslationWorkspace(state: ReedUiState, viewModel: ReedViewModel, m
                             Text(source.ifBlank { "—" }, maxLines = 3, overflow = TextOverflow.Ellipsis)
                             Spacer(Modifier.height(7.dp))
                             Text(languageName(state.selectedLanguage).uppercase(), fontSize = ReedType.label, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(target.ifBlank { "Missing" }, maxLines = 3, overflow = TextOverflow.Ellipsis, color = if (target.isBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+                            Text(target.ifBlank { "⚠ Missing" }, maxLines = 3, overflow = TextOverflow.Ellipsis, fontWeight = if (target.isBlank()) FontWeight.Bold else null, color = if (target.isBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
                         }
                     } else {
                         Row(itemModifier) {
                             Text(node.lineId, Modifier.width(150.dp), fontFamily = FontFamily.Monospace, fontSize = ReedType.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(source.ifBlank { "—" }, Modifier.weight(1f), maxLines = 3)
                             Spacer(Modifier.width(18.dp))
-                            Text(target.ifBlank { "Missing" }, Modifier.weight(1f), maxLines = 3, color = if (target.isBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+                            Text(target.ifBlank { "⚠ Missing" }, Modifier.weight(1f), maxLines = 3, fontWeight = if (target.isBlank()) FontWeight.Bold else null, color = if (target.isBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
                         }
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -2294,8 +2302,6 @@ private fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, String
         val term = languageSearch.trim().lowercase()
         term.isBlank() || code.lowercase().contains(term) || definition?.englishName?.lowercase()?.contains(term) == true || definition?.nativeName?.lowercase()?.contains(term) == true
     }
-    LaunchedEffect(Unit) { nameFocus.requestFocus() }
-
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -2335,7 +2341,7 @@ private fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, String
                                 if (!slugEdited) slug = projectSlug(value)
                             },
                             label = { Text("Project name") },
-                            placeholder = { Text("The Salt Gate") },
+                            placeholder = { Text("e.g. The Salt Gate", fontStyle = FontStyle.Italic) },
                             supportingText = { Text("Shown in Reed and production exports.") },
                             modifier = Modifier.fillMaxWidth().focusRequester(nameFocus),
                             singleLine = true,
@@ -2744,7 +2750,12 @@ private fun TooltipIconButton(
 
 @Composable
 private fun ReedMark(size: Dp) {
-    Image(painterResource(R.drawable.reed_logo), contentDescription = null, modifier = Modifier.size(size))
+    // The mark is a dark tile; a thin outline keeps it visible on dark backgrounds.
+    Image(
+        painterResource(R.drawable.reed_logo),
+        contentDescription = null,
+        modifier = Modifier.size(size).border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(size * 0.24f)),
+    )
 }
 
 private val NodeKind.display: String get() = when (this) {
@@ -2758,7 +2769,7 @@ private val NodeKind.nodeIcon: androidx.compose.ui.graphics.vector.ImageVector g
     NodeKind.START -> Icons.Outlined.AccountTree
     NodeKind.LINE -> Icons.Outlined.Add
     NodeKind.CHOICE -> Icons.Outlined.Link
-    NodeKind.GROUP -> Icons.Outlined.Group
+    NodeKind.GROUP -> Icons.AutoMirrored.Outlined.CallSplit
 }
 
 private val Workspace.displayName: String get() = when (this) {
