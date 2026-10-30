@@ -60,7 +60,7 @@ function projectOutputDirectory(value: string | undefined): string | undefined {
   }
   return target;
 }
-const server = new McpServer({ name: "reed", version: "0.2.2" });
+const server = new McpServer({ name: "reed", version: "0.2.3" });
 
 function register<T extends z.AnyZodObject>(name: string, description: string, schema: T, handler: (args: z.infer<T>) => unknown | Promise<unknown>): void {
   server.tool(name, description, schema.shape, async (args: z.infer<T>) => {

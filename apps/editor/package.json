@@ -1,7 +1,7 @@
 {
   "name": "@reed/editor",
   "productName": "Reed",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Offline branching dialogue and localization workspace for game development",
   "private": true,
   "license": "MPL-2.0",
