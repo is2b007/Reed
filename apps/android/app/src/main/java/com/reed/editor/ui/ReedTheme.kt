@@ -7,8 +7,26 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
 
 enum class ReedThemeMode { SYSTEM, DARK, LIGHT }
+
+/**
+ * Reed's text scale. Sized for a 10.5" reflective tablet at arm's length: nothing below 11sp,
+ * secondary text at 12–13sp, and readable body text at 14sp+. Use these instead of literal sizes.
+ */
+object ReedType {
+    /** Badges and rail labels where space is fixed. The floor for any text. */
+    val micro = 11.sp
+    /** Uppercase section labels, tags, and monospace metadata. */
+    val label = 12.sp
+    /** Supporting and helper text. */
+    val caption = 13.sp
+    /** Dense body text, such as node text on the canvas and lists. */
+    val body = 14.sp
+    val bodyLarge = 15.sp
+    val title = 18.sp
+}
 
 private val DarkColors = darkColorScheme(
     primary = Color(0xFFB6CB78),

@@ -183,6 +183,7 @@ import com.reed.git.GitIdentity
 import com.reed.git.RepositoryStatus
 import com.reed.editor.ui.ReedTheme
 import com.reed.editor.ui.ReedThemeMode
+import com.reed.editor.ui.ReedType
 import com.reed.remote.RemoteBridgePhase
 import kotlin.math.roundToInt
 
@@ -357,14 +358,14 @@ private fun HomeScreen(
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
                             Text(project.name, fontWeight = FontWeight.SemiBold)
-                            Text("${project.slug} · v${project.version} · ${project.languages.joinToString(" / ")}", fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${project.slug} · v${project.version} · ${project.languages.joinToString(" / ")}", fontFamily = FontFamily.Monospace, fontSize = ReedType.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Icon(Icons.Outlined.FolderOpen, contentDescription = "Open ${project.name}")
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
             }
-            Text("Offline by default · No telemetry · Git only runs when requested", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Offline by default · No telemetry · Git autosaves to repositories you connect", fontSize = ReedType.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
     if (createOpen) CreateProjectDialog({ createOpen = false }) { name, slug, languages, default ->
@@ -485,7 +486,7 @@ private fun CommandBar(state: ReedUiState, viewModel: ReedViewModel, onCheckpoin
                     Text(
                         state.workspace.displayName,
                         maxLines = 1,
-                        fontSize = 11.sp,
+                        fontSize = ReedType.caption,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -563,8 +564,8 @@ private fun WorkspaceRail(selected: Workspace, viewModel: ReedViewModel) {
                 Text(
                     workspace.shortLabel,
                     maxLines = 1,
-                    fontSize = 9.sp,
-                    lineHeight = 10.sp,
+                    fontSize = ReedType.micro,
+                    lineHeight = 13.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                     color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -581,7 +582,7 @@ private fun Navigator(state: ReedUiState, viewModel: ReedViewModel, width: Dp, o
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant).padding(10.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("PROJECT", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("PROJECT", Modifier.weight(1f), fontSize = ReedType.caption, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
             TooltipIconButton("Collapse project panel", Icons.Outlined.ChevronLeft, onCollapse)
         }
         Spacer(Modifier.height(8.dp))
@@ -599,7 +600,7 @@ private fun Navigator(state: ReedUiState, viewModel: ReedViewModel, width: Dp, o
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Outlined.AccountTree, null, Modifier.size(17.dp))
-                        Spacer(Modifier.width(8.dp)); Text(conversation.title, maxLines = 2, fontSize = 13.sp)
+                        Spacer(Modifier.width(8.dp)); Text(conversation.title, maxLines = 2, fontSize = ReedType.bodyLarge)
                     }
                 }
             }
@@ -656,7 +657,7 @@ private fun AddNodeStrip(state: ReedUiState, viewModel: ReedViewModel, onEdit: (
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text("ADD", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("ADD", fontSize = ReedType.label, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 AddNodeButton("Line", "Spoken dialogue or narration", Icons.Outlined.Add, compact) { addNode(NodeKind.LINE) }
                 AddNodeButton("Choice", "A player-selectable response", Icons.Outlined.Link, compact) { addNode(NodeKind.CHOICE) }
                 AddNodeButton("Junction", "Routes flow without spoken text", Icons.Outlined.Group, compact) { addNode(NodeKind.GROUP) }
@@ -1016,8 +1017,8 @@ private fun GraphCanvas(
                     .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
                     .padding(horizontal = 6.dp, vertical = 3.dp)
                     .semantics { contentDescription = "Pen marquee, ${selection.selectedNodeIds.size} nodes selected" },
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
+                fontSize = ReedType.label,
+                lineHeight = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -1145,15 +1146,15 @@ private fun ConnectionCreatePicker(
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
-                    Text("CONNECT & CREATE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Text("What belongs here?", fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                    Text("CONNECT & CREATE", fontSize = ReedType.label, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Text("What belongs here?", fontWeight = FontWeight.SemiBold, fontSize = ReedType.title)
                 }
                 TooltipIconButton("Cancel node creation", Icons.Outlined.Close, onDismiss)
             }
             Text(
                 "Reed will place it here and connect it from $sourceLineId.",
-                fontSize = 11.sp,
-                lineHeight = 15.sp,
+                fontSize = ReedType.caption,
+                lineHeight = 17.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
@@ -1171,8 +1172,8 @@ private fun ConnectionCreatePicker(
                         Text(
                             option.description,
                             Modifier.fillMaxWidth(),
-                            fontSize = 10.sp,
-                            lineHeight = 13.sp,
+                            fontSize = ReedType.label,
+                            lineHeight = 16.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -1272,7 +1273,7 @@ private fun GraphNode(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(node.kind.nodeIcon, null, Modifier.size(15.dp), tint = if (linkOrigin) borderColor else speakerAccent)
                 Spacer(Modifier.width(5.dp))
-                Text(node.kind.display, fontSize = 10.sp, lineHeight = 11.sp, fontWeight = FontWeight.Bold)
+                Text(node.kind.display, fontSize = ReedType.label, lineHeight = 14.sp, fontWeight = FontWeight.Bold)
                 if (linkOrigin || connectionTarget || multiSelected) {
                     Spacer(Modifier.width(6.dp))
                     Text(
@@ -1281,8 +1282,8 @@ private fun GraphNode(
                             linkOrigin -> "LINKING"
                             else -> "SELECTED"
                         },
-                        fontSize = 9.sp,
-                        lineHeight = 10.sp,
+                        fontSize = ReedType.micro,
+                        lineHeight = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (linkOrigin) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                     )
@@ -1293,17 +1294,17 @@ private fun GraphNode(
                         Modifier.size(18.dp).border(1.dp, speakerAccent, RoundedCornerShape(3.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(speaker.take(1).uppercase(), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        Text(speaker.take(1).uppercase(), fontSize = ReedType.micro, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.width(4.dp))
-                    Text(speaker, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                    Text(speaker, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = ReedType.label, fontWeight = FontWeight.Medium)
                 }
             }
             Text(
                 node.lineId,
                 fontFamily = FontFamily.Monospace,
-                fontSize = 9.sp,
-                lineHeight = 11.sp,
+                fontSize = ReedType.micro,
+                lineHeight = 14.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1315,7 +1316,7 @@ private fun GraphNode(
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    fontSize = 11.sp,
+                    fontSize = ReedType.label,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
@@ -1328,8 +1329,8 @@ private fun GraphNode(
                     modifier = Modifier.weight(1f),
                     maxLines = if (node.kind == NodeKind.CHOICE) 3 else 4,
                     overflow = TextOverflow.Ellipsis,
-                    fontSize = 13.sp,
-                    lineHeight = 17.sp,
+                    fontSize = ReedType.body,
+                    lineHeight = 19.sp,
                     color = if (text.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1337,14 +1338,14 @@ private fun GraphNode(
                         node.lineStatus.displayName,
                         modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(3.dp))
                             .padding(horizontal = 5.dp, vertical = 2.dp),
-                        fontSize = 9.sp,
-                        lineHeight = 10.sp,
+                        fontSize = ReedType.micro,
+                        lineHeight = 13.sp,
                         fontWeight = FontWeight.Medium,
                     )
                     Spacer(Modifier.width(5.dp))
                     Text(
                         "Voice ${node.voiceStatus.name.lowercase().replace('_', ' ')}",
-                        fontSize = 9.sp,
+                        fontSize = ReedType.micro,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1417,7 +1418,7 @@ private fun StylusHoverIndicator(sample: StylusHoverSample, node: DialogueNodeRe
                 .background(MaterialTheme.colorScheme.surface)
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 .padding(horizontal = 4.dp, vertical = 1.dp),
-            fontSize = 8.sp,
+            fontSize = ReedType.label,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
         )
@@ -1452,7 +1453,7 @@ private fun InspectorDialog(
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text("Line inspector", fontWeight = FontWeight.SemiBold)
-                            Text("Edit text, speaker, status, and links", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Edit text, speaker, status, and links", fontSize = ReedType.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         TextButton(onClick = onDismiss) { Text("Done") }
                     }
@@ -1489,7 +1490,7 @@ private fun NodeInspector(
     ) {
         if (showHeading) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("INSPECTOR", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("INSPECTOR", Modifier.weight(1f), fontSize = ReedType.caption, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (onCollapse != null) {
                     TooltipIconButton("Collapse inspector", Icons.Outlined.ChevronRight, onCollapse)
                 }
@@ -1516,7 +1517,7 @@ private fun NodeInspector(
             )
         }
         Spacer(Modifier.height(12.dp))
-        Text("Speaker", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Speaker", fontSize = ReedType.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
         SpeakerSelector(
             selectedId = node.speakerCharacterId,
             characters = state.overview?.characters.orEmpty(),
@@ -1541,7 +1542,7 @@ private fun NodeInspector(
             enabled = node.kind != NodeKind.GROUP
         ) { Icon(Icons.Outlined.Save, null); Spacer(Modifier.width(6.dp)); Text("Save text") }
         Spacer(Modifier.height(14.dp))
-        Text("Text status", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Text status", fontSize = ReedType.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
         StatusSelector(node.lineStatus) { viewModel.setLineStatus(node.lineId, it) }
         Spacer(Modifier.height(12.dp))
         Button(onClick = { viewModel.beginLink(node.id) }, enabled = node.kind != NodeKind.GROUP) {
@@ -1551,7 +1552,7 @@ private fun NodeInspector(
         outgoing.forEach { link ->
             val destination = state.graph?.nodes?.firstOrNull { it.id == link.destinationNodeId }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("→ ${destination?.lineId ?: "external node"}", Modifier.weight(1f), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                Text("→ ${destination?.lineId ?: "external node"}", Modifier.weight(1f), fontFamily = FontFamily.Monospace, fontSize = ReedType.caption)
                 IconButton(onClick = { viewModel.unlink(link.id) }) { Icon(Icons.Outlined.DeleteOutline, "Remove link") }
             }
         }
@@ -1631,17 +1632,17 @@ private fun TranslationWorkspace(state: ReedUiState, viewModel: ReedViewModel, m
                         .padding(vertical = 12.dp)
                     if (stacked) {
                         Column(itemModifier) {
-                            Text(node.lineId, fontFamily = FontFamily.Monospace, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(node.lineId, fontFamily = FontFamily.Monospace, fontSize = ReedType.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Spacer(Modifier.height(7.dp))
-                            Text("SOURCE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("SOURCE", fontSize = ReedType.label, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(source.ifBlank { "—" }, maxLines = 3, overflow = TextOverflow.Ellipsis)
                             Spacer(Modifier.height(7.dp))
-                            Text(languageName(state.selectedLanguage).uppercase(), fontSize = 9.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(languageName(state.selectedLanguage).uppercase(), fontSize = ReedType.label, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(target.ifBlank { "Missing" }, maxLines = 3, overflow = TextOverflow.Ellipsis, color = if (target.isBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
                         }
                     } else {
                         Row(itemModifier) {
-                            Text(node.lineId, Modifier.width(150.dp), fontFamily = FontFamily.Monospace, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(node.lineId, Modifier.width(150.dp), fontFamily = FontFamily.Monospace, fontSize = ReedType.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(source.ifBlank { "—" }, Modifier.weight(1f), maxLines = 3)
                             Spacer(Modifier.width(18.dp))
                             Text(target.ifBlank { "Missing" }, Modifier.weight(1f), maxLines = 3, color = if (target.isBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
@@ -1681,10 +1682,10 @@ private fun CharacterWorkspace(state: ReedUiState, viewModel: ReedViewModel, mod
             LazyColumn {
                 items(state.overview?.characters ?: emptyList(), key = { it.id }) { character ->
                     Column(Modifier.fillMaxWidth().clickable { editing = character }.padding(vertical = 14.dp)) {
-                        Row { Text(character.name, fontWeight = FontWeight.SemiBold); if (character.isPlayer) { Spacer(Modifier.width(8.dp)); Text("PLAYER", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary) } }
+                        Row { Text(character.name, fontWeight = FontWeight.SemiBold); if (character.isPlayer) { Spacer(Modifier.width(8.dp)); Text("PLAYER", fontSize = ReedType.caption, color = MaterialTheme.colorScheme.primary) } }
                         Text(character.description.ifBlank { "No description" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (character.actorNotes.isNotBlank()) Text("Actor: ${character.actorNotes}", fontSize = 12.sp)
-                        if (character.voiceNotes.isNotBlank()) Text("Voice: ${character.voiceNotes}", fontSize = 12.sp)
+                        if (character.actorNotes.isNotBlank()) Text("Actor: ${character.actorNotes}", fontSize = ReedType.body)
+                        if (character.voiceNotes.isNotBlank()) Text("Voice: ${character.voiceNotes}", fontSize = ReedType.body)
                     }
                     HorizontalDivider()
                 }
@@ -1737,7 +1738,7 @@ private fun VariableWorkspace(state: ReedUiState, viewModel: ReedViewModel, modi
                                 Text(variable.name, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
                             }
                             Text(variable.description.ifBlank { "No description" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("${variable.type} = ${variable.initialValue}", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                            Text("${variable.type} = ${variable.initialValue}", fontFamily = FontFamily.Monospace, fontSize = ReedType.body)
                         }
                     } else {
                         Row(Modifier.fillMaxWidth().clickable { editing = variable }.padding(vertical = 14.dp), verticalAlignment = Alignment.Top) {
@@ -1793,7 +1794,7 @@ private fun AutoSyncSettings(state: ReedUiState, viewModel: ReedViewModel) {
     }
     state.autoSyncMessage?.let {
         Spacer(Modifier.height(6.dp))
-        Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(it, fontSize = ReedType.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -1964,13 +1965,13 @@ private fun AgentAccessWorkspace(
             }
             access.projectName?.let {
                 Spacer(Modifier.height(10.dp))
-                Text("Project · $it", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                Text("Project · $it", fontFamily = FontFamily.Monospace, fontSize = ReedType.body)
             }
             access.expiresAtEpochMs?.let {
-                Text("Session expires · ${java.time.Instant.ofEpochMilli(it)}", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                Text("Session expires · ${java.time.Instant.ofEpochMilli(it)}", fontFamily = FontFamily.Monospace, fontSize = ReedType.body)
             }
             access.lastRequestAtEpochMs?.let {
-                Text("Last Claude request · ${java.time.Instant.ofEpochMilli(it)}", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                Text("Last Claude request · ${java.time.Instant.ofEpochMilli(it)}", fontFamily = FontFamily.Monospace, fontSize = ReedType.body)
             }
         }
         Spacer(Modifier.height(20.dp))
@@ -2046,7 +2047,7 @@ private fun AgentAccessWorkspace(
                             connectorUrl,
                             modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant).padding(12.dp),
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
+                            fontSize = ReedType.caption,
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -2063,7 +2064,7 @@ private fun AgentAccessWorkspace(
                             connectorUrl,
                             modifier = Modifier.weight(1f).border(1.dp, MaterialTheme.colorScheme.outlineVariant).padding(12.dp),
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
+                            fontSize = ReedType.caption,
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -2126,7 +2127,7 @@ private fun StatusBar(state: ReedUiState) {
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontSize = 11.sp,
+                fontSize = ReedType.caption,
             )
             if (availableWidth >= 480.dp) {
                 Text(
@@ -2138,16 +2139,16 @@ private fun StatusBar(state: ReedUiState) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
+                    fontSize = ReedType.label,
                 )
             }
             if (state.agentAccess.active && availableWidth >= 640.dp) {
                 Spacer(Modifier.width(14.dp))
-                Text("Agent on", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("Agent on", fontSize = ReedType.label, fontWeight = FontWeight.Bold)
             }
             state.repositoryStatus?.takeIf { availableWidth >= 760.dp }?.let {
                 Spacer(Modifier.width(14.dp))
-                Text("${it.branch} ↑${it.ahead} ↓${it.behind}", fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                Text("${it.branch} ↑${it.ahead} ↓${it.behind}", fontFamily = FontFamily.Monospace, fontSize = ReedType.label)
             }
         }
     }
@@ -2187,7 +2188,7 @@ private fun ProjectSettingsWorkspace(state: ReedUiState, viewModel: ReedViewMode
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Languages", fontWeight = FontWeight.SemiBold)
-                    Text("IETF BCP 47 tags · ${languages.size} enabled", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("IETF BCP 47 tags · ${languages.size} enabled", fontFamily = FontFamily.Monospace, fontSize = ReedType.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 OutlinedButton(onClick = { setLanguages(GameLanguages.gameMarketPreset().toSet()) }) { Text("Game preset") }
             }
@@ -2197,7 +2198,7 @@ private fun ProjectSettingsWorkspace(state: ReedUiState, viewModel: ReedViewMode
                     OutlinedButton(onClick = { setLanguages(languages - code) }, shape = RoundedCornerShape(4.dp)) {
                         Text(GameLanguages.displayName(code), maxLines = 1)
                         Spacer(Modifier.width(6.dp))
-                        Text(code, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                        Text(code, fontFamily = FontFamily.Monospace, fontSize = ReedType.label)
                         Spacer(Modifier.width(6.dp))
                         Text("×")
                     }
@@ -2244,7 +2245,7 @@ private fun ProjectSettingsWorkspace(state: ReedUiState, viewModel: ReedViewMode
             }
             Spacer(Modifier.height(14.dp))
             Text("Default writing language", fontWeight = FontWeight.SemiBold)
-            Text("The source language writers author first. Translation can use any configured pair.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("The source language writers author first. Translation can use any configured pair.", fontSize = ReedType.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(6.dp))
             Box {
                 OutlinedButton(
@@ -2271,7 +2272,7 @@ private fun ProjectSettingsWorkspace(state: ReedUiState, viewModel: ReedViewMode
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             ) { Text(if (state.busyLabel == "Saving language settings") "Saving…" else "Save language settings") }
             Spacer(Modifier.height(8.dp))
-            Text("Removing a language from the active set does not erase its authored text. Re-enable the tag to restore it.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Removing a language from the active set does not erase its authored text. Re-enable the tag to restore it.", fontSize = ReedType.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -2319,7 +2320,7 @@ private fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, String
                         Spacer(Modifier.width(12.dp))
                         Column {
                             Text("New local project", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                            Text("Created on this tablet and available offline.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Created on this tablet and available offline.", fontSize = ReedType.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     HorizontalDivider()
@@ -2369,7 +2370,7 @@ private fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, String
                         )
                         Spacer(Modifier.height(12.dp))
                         Text("Project languages", fontWeight = FontWeight.SemiBold)
-                        Text("Choose every language this story will contain.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Choose every language this story will contain.", fontSize = ReedType.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(6.dp))
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(
@@ -2419,7 +2420,7 @@ private fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, String
                         }
                         Spacer(Modifier.height(10.dp))
                         Text("Source language", fontWeight = FontWeight.SemiBold)
-                        Text("The language writers author first. Translation can use any configured pair.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("The language writers author first. Translation can use any configured pair.", fontSize = ReedType.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(6.dp))
                         Box {
                             OutlinedButton(
@@ -2444,7 +2445,7 @@ private fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, String
                         }
                         Text(
                             if (languages.isEmpty()) "Select at least one language." else "${languageName(sourceLanguage)} will be the initial source.",
-                            fontSize = 12.sp,
+                            fontSize = ReedType.body,
                             color = if (languages.isEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -2485,7 +2486,7 @@ private fun LanguageCheckbox(
         Spacer(Modifier.width(10.dp))
         Column {
             Text(languageName(code), maxLines = 1)
-            Text(code, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(code, fontFamily = FontFamily.Monospace, fontSize = ReedType.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -2529,7 +2530,7 @@ private fun CloneDialog(onDismiss: () -> Unit, onClone: (String, String?, String
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(url, { url = it }, label = { Text("HTTPS repository URL") }, singleLine = true)
                 OutlinedTextField(token, { token = it }, label = { Text("Fine-grained access token (private repositories)") }, singleLine = true)
-                Text("The token is encrypted by Android Keystore and is never written into the project or Git config.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("The token is encrypted by Android Keystore and is never written into the project or Git config.", fontSize = ReedType.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(name, { name = it }, label = { Text("Commit author name") }, singleLine = true)
                 OutlinedTextField(email, { email = it }, label = { Text("Commit author email") }, singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
@@ -2577,7 +2578,7 @@ private fun RepositoryTokenDialog(onDismiss: () -> Unit, onSave: (String) -> Uni
                 )
                 Text(
                     "The token is never written into the project, SQLite, exports, logs, or Git configuration.",
-                    fontSize = 11.sp,
+                    fontSize = ReedType.caption,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
