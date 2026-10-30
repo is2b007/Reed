@@ -62,7 +62,7 @@ async function useProject<T>(command: Command, action: (project: ReedProject) =>
 const program = new Command()
   .name("reed")
   .description("Offline project tools for the Reed branching dialogue editor")
-  .version("0.2.1")
+  .version("0.2.2")
   .option("-p, --project <directory>", "Reed project folder", process.cwd())
   .option("--json", "print a stable machine-readable envelope", false)
   .addOption(new Option("--source <source>", "mutation source").choices(["human", "agent", "system"]).default("human"));
