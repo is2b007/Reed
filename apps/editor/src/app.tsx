@@ -417,12 +417,12 @@ function ProjectSettingsDialog({ state, onClose, onSaved }: { state: EditorBoots
 
 function updateStatusText(update: UpdateState): string {
   if (update.status === "checking") return "Checking GitHub for a newer release…";
-  if (update.status === "current") return `Reed ${update.currentVersion} is the latest version.`;
+  if (update.status === "current") return "Up to date.";
   if (update.status === "available") return `Reed ${update.latestVersion} is available. You have ${update.currentVersion}.`;
   if (update.status === "downloading") return `Downloading Reed ${update.latestVersion}… ${Math.round((update.progress ?? 0) * 100)}%`;
   if (update.status === "installing") return update.message ?? "Installing…";
   if (update.status === "error") return update.message ?? "The update check failed.";
-  return `You have Reed ${update.currentVersion}.`;
+  return "Not checked yet.";
 }
 
 function SettingRow({ title, description, children }: { title: string; description?: React.ReactNode; children?: React.ReactNode }) {
@@ -445,18 +445,18 @@ function UpdateSettings({ update }: { update: UpdateState }) {
     </SettingRow>
     {update.status === "downloading" && <progress max={1} value={update.progress ?? 0} aria-label="Update download progress" />}
     <SettingRow title="Check automatically" description="At launch and twice a day. Nothing installs without your OK."><SettingSwitch label="Check for updates automatically" checked={update.autoCheck} onChange={(checked) => act(() => window.reed.setAutoUpdateCheck(checked))} /></SettingRow>
-    <p className="pref-note">Reed contacts GitHub only when you check or turn on automatic checks. Updates are verified against the release checksums and never touch your projects.</p>
+    <p className="pref-note">Updates are checksum-verified and never touch your projects.</p>
     {error && <div className="error-banner" role="alert">{error}</div>}
   </section>;
 }
 
 const autoSyncIntervalOptions = [1, 5, 10, 15, 30, 60];
 
-function autoSyncSummary(autoSync: AutoSyncState): string {
-  if (!autoSync.enabled) return "Git autosave is off. Turn it on in Reed settings.";
+function autoSyncSummary(autoSync: AutoSyncState, inSettings = false): string {
+  if (!autoSync.enabled) return inSettings ? "Off." : "Git autosave is off. Turn it on in Reed settings.";
   if (autoSync.running) return "Autosaving to Git…";
   const when = autoSync.lastRunAt ? ` · ${new Date(autoSync.lastRunAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "";
-  return autoSync.message ? `${autoSync.message}${when}` : `Git autosave every ${autoSync.intervalMinutes} min.`;
+  return autoSync.message ? `${autoSync.message}${when}` : inSettings ? "Nothing autosaved yet in this session." : `Git autosave every ${autoSync.intervalMinutes} min.`;
 }
 
 function AutoSyncSettingsSection({ autoSync }: { autoSync: AutoSyncState }) {
@@ -465,8 +465,8 @@ function AutoSyncSettingsSection({ autoSync }: { autoSync: AutoSyncState }) {
   return <section className="pref-pane" aria-labelledby="autosync-settings-heading"><h3 id="autosync-settings-heading">Git autosave</h3>
     <SettingRow title="Commit and push automatically" description="Commits the open story to its local history on a timer, when you close it and when you quit, then pushes if the project has a remote."><SettingSwitch label="Commit and push automatically" checked={autoSync.enabled} onChange={(enabled) => act(() => window.reed.setAutoSync({ enabled }))} /></SettingRow>
     <SettingRow title="Interval" description="How often Reed commits while you work."><select aria-label="Autosave interval" value={autoSync.intervalMinutes} disabled={!autoSync.enabled} onChange={(event) => act(() => window.reed.setAutoSync({ intervalMinutes: Number(event.target.value) }))}>{autoSyncIntervalOptions.map((minutes) => <option key={minutes} value={minutes}>{minutes === 1 ? "Every minute" : `Every ${minutes} minutes`}</option>)}</select></SettingRow>
-    <SettingRow title="Last autosave" description={<span role="status" className={autoSync.lastOutcome === "error" || autoSync.lastOutcome === "push-failed" ? "bad" : undefined}>{autoSyncSummary(autoSync)}</span>}><button type="button" disabled={autoSync.running} onClick={() => act(() => window.reed.runAutoSync())}>{autoSync.running ? "Saving…" : "Commit and push now"}</button></SettingRow>
-    <p className="pref-note">Every edit is already saved on this Mac. Projects without local history are left alone, and Reed never force-pushes: if the remote has newer checkpoints, it keeps committing locally until you review them in History.</p>
+    <SettingRow title="Last autosave" description={<span role="status" className={autoSync.lastOutcome === "error" || autoSync.lastOutcome === "push-failed" ? "bad" : undefined}>{autoSyncSummary(autoSync, true)}</span>}><button type="button" disabled={autoSync.running} onClick={() => act(() => window.reed.runAutoSync())}>{autoSync.running ? "Saving…" : "Commit and push now"}</button></SettingRow>
+    <p className="pref-note">Edits always save locally. Reed never force-pushes.</p>
     {error && <div className="error-banner" role="alert">{error}</div>}
   </section>;
 }
