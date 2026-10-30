@@ -1976,10 +1976,16 @@ private fun AgentAccessWorkspace(
                 Text("Project · $it", fontFamily = FontFamily.Monospace, fontSize = ReedType.body)
             }
             access.expiresAtEpochMs?.let {
-                Text("Session expires · ${java.time.Instant.ofEpochMilli(it)}", fontFamily = FontFamily.Monospace, fontSize = ReedType.body)
+                val expiry = java.time.Instant.ofEpochMilli(it)
+                val local = java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT)
+                    .withZone(java.time.ZoneId.systemDefault()).format(expiry)
+                val minutes = java.time.Duration.between(java.time.Instant.now(), expiry).toMinutes().coerceAtLeast(0)
+                Text("Session expires at $local (in ${minutes / 60} h ${minutes % 60} min)", fontSize = ReedType.body)
             }
             access.lastRequestAtEpochMs?.let {
-                Text("Last Claude request · ${java.time.Instant.ofEpochMilli(it)}", fontFamily = FontFamily.Monospace, fontSize = ReedType.body)
+                val time = java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.MEDIUM)
+                    .withZone(java.time.ZoneId.systemDefault()).format(java.time.Instant.ofEpochMilli(it))
+                Text("Last Claude request at $time", fontSize = ReedType.body)
             }
         }
         Spacer(Modifier.height(20.dp))
