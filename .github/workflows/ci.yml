@@ -50,3 +50,9 @@ jobs:
       - name: Test, lint, and assemble
         working-directory: apps/android
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug
+      - name: Upload debug APK for device checks
+        uses: actions/upload-artifact@v6
+        with:
+          name: reed-debug-apk
+          path: apps/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
