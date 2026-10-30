@@ -82,6 +82,11 @@ android {
     }
 
     buildTypes {
+        getByName("debug") {
+            // Installs beside the release app on a test device instead of replacing it.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         getByName("release") {
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
